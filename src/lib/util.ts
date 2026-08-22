@@ -22,7 +22,12 @@ export function download(blob: Blob, filename: string) {
 }
 
 export function slugify(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'binder';
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'binder'
+  );
 }
 
 /** Downscale huge phone photos so the local store stays reasonable. */

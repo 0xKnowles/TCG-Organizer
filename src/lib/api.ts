@@ -45,6 +45,9 @@ export async function searchCards(query: string, opts: SearchOptions = {}): Prom
     name: c.name,
     setName: c.set?.name,
     number: c.number,
-    image: c.images?.large || c.images?.small ? { type: 'remote' as const, url: (c.images!.large ?? c.images!.small)! } : undefined,
+    image:
+      c.images?.large || c.images?.small
+        ? { type: 'remote' as const, url: (c.images!.large ?? c.images!.small)! }
+        : undefined,
   }));
 }

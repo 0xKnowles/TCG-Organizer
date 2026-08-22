@@ -1,7 +1,5 @@
 /** Where the pixels for an item live. Remote = a URL, local = a blob in IndexedDB. */
-export type ImageSrc =
-  | { type: 'remote'; url: string }
-  | { type: 'local'; key: string };
+export type ImageSrc = { type: 'remote'; url: string } | { type: 'local'; key: string };
 
 export interface CardItem {
   id: string;
@@ -69,4 +67,12 @@ export interface Rect {
 /** Payload carried by an HTML5 drag from the library or from another slot. */
 export type DragPayload =
   | { source: 'library'; itemId: string; kind: 'card' | 'art'; spanCols: number; spanRows: number }
-  | { source: 'placement'; placementId: string; kind: 'card' | 'art'; spanCols: number; spanRows: number; grabCol: number; grabRow: number };
+  | {
+      source: 'placement';
+      placementId: string;
+      kind: 'card' | 'art';
+      spanCols: number;
+      spanRows: number;
+      grabCol: number;
+      grabRow: number;
+    };

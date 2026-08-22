@@ -1,10 +1,8 @@
 import type { Binder, ImageSrc, Placement } from '../types';
-import { CARD_ASPECT } from './geometry';
+import { CARD_ASPECT, PAGE_GAP, PAGE_PAD, pocketWidth } from './geometry';
 import { blobUrl } from './idb';
 
-const GAP = 0.04; // gap between slots, as a fraction of slot width
-const PAD = 0.09;
-const SPREAD_GUTTER = 0.22;
+const SPREAD_GUTTER = 0.22; // gutter between two pages, as a fraction of slot width
 
 async function resolve(src: ImageSrc | undefined): Promise<string | undefined> {
   if (!src) return undefined;
@@ -35,10 +33,7 @@ function drawCover(
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, radius);
   ctx.clip();
-  const scale =
-    p.fit === 'cover'
-      ? Math.max(w / img.width, h / img.height)
-      : Math.min(w / img.width, h / img.height);
+  const scale = p.fit === 'cover' ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
   const dx = x + (w - dw) * (p.fit === 'cover' ? p.focusX / 100 : 0.5);
@@ -57,14 +52,12 @@ function drawCover(
  * if a host refuses, that card is drawn as an empty slot rather than
  * poisoning the whole export.
  */
-export async function renderPagesToPng(
-  binder: Binder,
-  pages: (number | null)[],
-  slotWidth = 420,
-): Promise<Blob> {
+export async function renderPagesToPng(binder: Binder, pages: (number | null)[], slotWidth = 420): Promise<Blob> {
   const slotH = slotWidth / CARD_ASPECT;
-  const pageW = binder.cols * slotWidth + (binder.cols - 1) * GAP * slotWidth + 2 * PAD * slotWidth;
-  const pageH = binder.rows * slotH + (binder.rows - 1) * GAP * slotWidth + 2 * PAD * slotWidth;
+  const pageW = slotWidth / pocketWidth(binder.cols);
+  const gap = PAGE_GAP * pageW;
+  const pad = PAGE_PAD * pageW;
+  const pageH = 2 * pad + binder.rows * slotH + (binder.rows - 1) * gap;
   const gutter = pages.length > 1 ? SPREAD_GUTTER * slotWidth : 0;
 
   const canvas = document.createElement('canvas');
@@ -73,26 +66,26 @@ export async function renderPagesToPng(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable');
 
-  ctx.fillStyle = '#15161c';
+  ctx.fillStyle = '#111110';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
     const originX = i * (pageW + gutter);
 
-    ctx.fillStyle = '#1e2029';
+    ctx.fillStyle = '#1c1c1b';
     ctx.fillRect(originX, 0, pageW, pageH);
     if (page === null) continue;
 
     const slotXY = (col: number, row: number) => ({
-      x: originX + PAD * slotWidth + col * (slotWidth + GAP * slotWidth),
-      y: PAD * slotWidth + row * (slotH + GAP * slotWidth),
+      x: originX + pad + col * (slotWidth + gap),
+      y: pad + row * (slotH + gap),
     });
 
     const radius = slotWidth * 0.03;
 
     // Empty pockets first.
-    ctx.fillStyle = '#2a2d38';
+    ctx.fillStyle = '#262624';
     for (let row = 0; row < binder.rows; row++) {
       for (let col = 0; col < binder.cols; col++) {
         const { x, y } = slotXY(col, row);
@@ -109,8 +102,8 @@ export async function renderPagesToPng(
       const url = await resolve(item.image);
       if (!url) continue;
       const { x, y } = slotXY(p.col, p.row);
-      const w = p.spanCols * slotWidth + (p.spanCols - 1) * GAP * slotWidth;
-      const h = p.spanRows * slotH + (p.spanRows - 1) * GAP * slotWidth;
+      const w = p.spanCols * slotWidth + (p.spanCols - 1) * gap;
+      const h = p.spanRows * slotH + (p.spanRows - 1) * gap;
       try {
         const img = await loadImage(url);
         drawCover(ctx, img, x, y, w, h, p, radius);

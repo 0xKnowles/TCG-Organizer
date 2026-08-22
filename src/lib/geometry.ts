@@ -2,6 +2,21 @@ import type { Binder, Placement, Rect } from '../types';
 
 export const CARD_ASPECT = 63 / 88; // a real Pokemon card, width / height
 
+/** Page padding and pocket gap, as fractions of the page's width. */
+export const PAGE_PAD = 0.034;
+export const PAGE_GAP = 0.032;
+
+/** Width of one pocket, as a fraction of the page width. */
+export function pocketWidth(cols: number): number {
+  return (1 - 2 * PAGE_PAD - (cols - 1) * PAGE_GAP) / cols;
+}
+
+/** Page width / height, chosen so every pocket keeps a real card's proportions. */
+export function pageAspect(cols: number, rows: number): number {
+  const height = 2 * PAGE_PAD + (rows * pocketWidth(cols)) / CARD_ASPECT + (rows - 1) * PAGE_GAP;
+  return 1 / height;
+}
+
 export function rectOf(p: Placement): Rect {
   return { page: p.page, col: p.col, row: p.row, spanCols: p.spanCols, spanRows: p.spanRows };
 }
@@ -20,10 +35,7 @@ export function inBounds(rect: Rect, cols: number, rows: number): boolean {
 export function overlaps(a: Rect, b: Rect): boolean {
   if (a.page !== b.page) return false;
   return (
-    a.col < b.col + b.spanCols &&
-    b.col < a.col + a.spanCols &&
-    a.row < b.row + b.spanRows &&
-    b.row < a.row + a.spanRows
+    a.col < b.col + b.spanCols && b.col < a.col + a.spanCols && a.row < b.row + b.spanRows && b.row < a.row + a.spanRows
   );
 }
 
@@ -38,11 +50,7 @@ export function canDrop(binder: Binder, rect: Rect, exceptId?: string): boolean 
   if (hit.length === 0) return true;
   // A single-slot item may swap with another single-slot item.
   return (
-    rect.spanCols === 1 &&
-    rect.spanRows === 1 &&
-    hit.length === 1 &&
-    hit[0].spanCols === 1 &&
-    hit[0].spanRows === 1
+    rect.spanCols === 1 && rect.spanRows === 1 && hit.length === 1 && hit[0].spanCols === 1 && hit[0].spanRows === 1
   );
 }
 
