@@ -12,12 +12,14 @@ export default function TopBar({
   showModes,
   visiblePages,
   activePage,
+  onPrint,
 }: {
   mode: ViewMode;
   onModeChange: (mode: ViewMode) => void;
   showModes: boolean;
   visiblePages: (number | null)[];
   activePage: number;
+  onPrint: () => void;
 }) {
   const { binder, dispatch } = useBinder();
   const { loadBinder, closeBinder } = useBinderCtx();
@@ -199,6 +201,16 @@ export default function TopBar({
                 </button>
 
                 <hr />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onPrint();
+                  }}
+                >
+                  Print sheets <span>to scale</span>
+                </button>
                 <button type="button" role="menuitem" onClick={savePng} disabled={busy === 'png'}>
                   Export PNG <span>{busy === 'png' ? 'working' : 'this view'}</span>
                 </button>

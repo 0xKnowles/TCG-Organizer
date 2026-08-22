@@ -20,6 +20,9 @@ including fan art and photos that span two or more pockets.
 - **Binder view.** One page at a time, or a left/right spread, with an option for
   page 1 to sit alone the way a binder opens on its cover.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
+- **Print to size.** Sheets of tiles at true physical size — 63 × 88 mm by
+  default — with cut marks and a label telling you which pocket each piece goes
+  in. Art that spans pockets is sliced into one piece per pocket.
 - **Export.** Render the current view to PNG, or save the binder as a file you can
   reopen later.
 
@@ -43,6 +46,32 @@ npm run preview  # serve the built bundle
 ```
 
 Node 20+. The build output is static, so any file host will serve it.
+
+## Printing to size
+
+**Binder menu → Print sheets.** Each pocket holds its own piece of paper, so a
+mural covering four pockets prints as four separate tiles, each exactly one card
+in size. Every tile is labelled with the pocket it belongs in (`P1 · C2 R1`), and
+they are laid out in the order you would fill the binder.
+
+**Set the pocket divider.** Measure the black strip between two pockets on your
+binder — usually 3–5 mm — and put that in the _Gap_ field. The art is then laid
+out across the full span the binder gives it, dividers included, and the strips
+that would sit behind a divider are simply not printed. A horizon or a road runs
+straight across the seam instead of jumping. Set the gap to `0` to slice the
+image into equal pieces instead, which keeps every pixel but shifts the halves
+apart by the width of the divider.
+
+**When you print:** choose _Scale 100%_ (not "Fit to page") and _Margins: None_.
+Every sheet carries a 50 mm ruler — measure it once with a real ruler and you
+know your printer is honest. Sheets are US Letter (6 tiles) or A4 (9 tiles), and
+card size can be standard 63 × 88 mm, Japanese 59 × 86 mm, or anything you type.
+
+The panel shows the resolution each image lands at once printed. Below roughly
+180 dpi a photo starts to look soft at card size; 300 dpi is comfortable.
+
+By default only your own images and art are selected — cards you found through
+search are already in your hands, but you can tick them too if you want proxies.
 
 ## How it fits together
 

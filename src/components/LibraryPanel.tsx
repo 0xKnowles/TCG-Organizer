@@ -87,6 +87,7 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
           ? {
               id: uid('art'),
               kind: 'art',
+              origin: 'upload',
               name: label,
               image: { type: 'local', key },
               spanCols: span.c,
@@ -95,6 +96,7 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
           : {
               id: uid('card'),
               kind: 'card',
+              origin: 'upload',
               name: label,
               image: { type: 'local', key },
             },
@@ -114,6 +116,7 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
       ? ({
           id: uid('art'),
           kind: 'art',
+          origin: 'link',
           name: label,
           image: { type: 'remote', url: href },
           spanCols: span.c,
@@ -122,6 +125,7 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
       : ({
           id: uid('card'),
           kind: 'card',
+          origin: 'link',
           name: label,
           image: { type: 'remote', url: href },
         } satisfies CardItem);

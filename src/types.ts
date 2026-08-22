@@ -1,10 +1,14 @@
 /** Where the pixels for an item live. Remote = a URL, local = a blob in IndexedDB. */
 export type ImageSrc = { type: 'remote'; url: string } | { type: 'local'; key: string };
 
+/** Where an item came from, so printing can default to what you must print. */
+export type Origin = 'api' | 'upload' | 'link';
+
 export interface CardItem {
   id: string;
   kind: 'card';
   name: string;
+  origin?: Origin;
   setName?: string;
   number?: string;
   image?: ImageSrc;
@@ -16,6 +20,7 @@ export interface ArtItem {
   id: string;
   kind: 'art';
   name: string;
+  origin?: Origin;
   image: ImageSrc;
   /** Default footprint in slots when dropped into a page. */
   spanCols: number;

@@ -42,6 +42,7 @@ export async function searchCards(query: string, opts: SearchOptions = {}): Prom
   return (body.data ?? []).map((c) => ({
     id: uid('card'),
     kind: 'card' as const,
+    origin: 'api' as const,
     name: c.name,
     setName: c.set?.name,
     number: c.number,

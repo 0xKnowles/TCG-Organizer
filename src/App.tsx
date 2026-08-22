@@ -4,6 +4,7 @@ import LibraryPanel from './components/LibraryPanel';
 import PageView, { type Pending } from './components/PageView';
 import Inspector from './components/Inspector';
 import TopBar, { type ViewMode } from './components/TopBar';
+import PrintDialog from './components/PrintDialog';
 import type { LibraryItem } from './types';
 import { useBinderCtx } from './store';
 import { canDrop, pageAspect, spreadCount, spreadPages } from './lib/geometry';
@@ -22,6 +23,7 @@ function Workspace() {
   const [pending, setPending] = useState<Pending>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   const total = binder ? spreadCount(binder, mode) : 1;
   const index = clamp(spreadIndex, 0, Math.max(0, total - 1));
@@ -170,6 +172,7 @@ function Workspace() {
         showModes={wide}
         visiblePages={pages}
         activePage={activePage}
+        onPrint={() => setPrinting(true)}
       />
 
       <div className="workspace">
@@ -259,6 +262,8 @@ function Workspace() {
           </button>
         </div>
       )}
+
+      {printing && <PrintDialog onClose={() => setPrinting(false)} />}
 
       {selected && !pending && (
         <Inspector

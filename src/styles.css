@@ -1063,3 +1063,257 @@ input.title-input:hover {
     gap: 14px;
   }
 }
+
+/* ------------------------------ print sheets ----------------------------- */
+.print-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.print-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(52px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 12px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.print-head .spacer {
+  flex: 1 1 auto;
+}
+.print-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* On a phone the options and the preview scroll together as one column. */
+  overflow: auto;
+}
+.print-options {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 16px;
+  padding: 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.opt {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.opt .seg {
+  max-width: 100%;
+}
+.field.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field.inline > span {
+  margin: 0;
+  white-space: nowrap;
+}
+.print-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  max-height: 190px;
+  overflow: auto;
+}
+.print-list .check {
+  align-items: flex-start;
+  padding: 5px 4px;
+  border-radius: 5px;
+  width: 100%;
+}
+.print-list .check:hover {
+  background: var(--panel-2);
+}
+.print-item b {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.print-item small {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.print-preview {
+  flex: 1 1 auto;
+  min-height: 60vh;
+  overflow: auto;
+  padding: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.print-scale {
+  display: grid;
+  gap: 14px;
+  transform: scale(var(--print-scale, 1));
+  transform-origin: top center;
+}
+
+/* A sheet is drawn at true physical size; the preview only scales it visually. */
+.sheet {
+  position: relative;
+  background: #fff;
+  color: #111;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 10px 30px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sheet-grid {
+  display: grid;
+  align-content: start;
+  justify-content: center;
+  flex: 1 1 auto;
+}
+.tile-wrap {
+  position: relative;
+}
+.tile {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+}
+.tile img {
+  position: absolute;
+  max-width: none;
+}
+.tile .mark {
+  position: absolute;
+  background: #9a9a96;
+}
+.tile .mark.tl,
+.tile .mark.tr {
+  top: -1.9mm;
+  width: 0.2mm;
+  height: 1.4mm;
+}
+.tile .mark.bl,
+.tile .mark.br {
+  bottom: -1.9mm;
+  width: 0.2mm;
+  height: 1.4mm;
+}
+.tile .mark.tl,
+.tile .mark.bl {
+  left: 0;
+}
+.tile .mark.tr,
+.tile .mark.br {
+  right: 0;
+}
+.tile-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3.3mm;
+  text-align: center;
+  font-size: 2.2mm;
+  line-height: 1;
+  color: #8a8a86;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-foot {
+  flex: 0 0 auto;
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6mm;
+  font-size: 2.6mm;
+  color: #8a8a86;
+}
+.ruler {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6mm;
+}
+.ruler i {
+  display: block;
+  width: 50mm;
+  height: 1.6mm;
+  border: 0.2mm solid #8a8a86;
+  border-top: 0;
+}
+.ruler em {
+  font-style: normal;
+  font-size: 2.4mm;
+}
+
+@media (min-width: 900px) {
+  .print-body {
+    flex-direction: row;
+    overflow: hidden;
+  }
+  .print-options {
+    flex: 0 0 330px;
+    width: 330px;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+    align-content: start;
+    overflow: auto;
+  }
+}
+
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    background: #fff;
+  }
+  .app,
+  .print-head,
+  .print-options {
+    display: none !important;
+  }
+  .print-dialog {
+    position: static;
+    display: block;
+    background: #fff;
+  }
+  .print-body,
+  .print-preview {
+    display: block;
+    overflow: visible;
+    padding: 0;
+    min-height: 0;
+  }
+  .print-scale {
+    display: block;
+    transform: none;
+    gap: 0;
+  }
+  .sheet {
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;
+  }
+  .sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .tile img,
+  .sheet {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
