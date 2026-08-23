@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Placement } from '../types';
 import { useBinder } from '../store';
-import { PAGE_GAP, PAGE_PAD, canDrop, pageAspect } from '../lib/geometry';
+import { anchorAt, canDrop, layoutPlacement, pageStyle, placementsOnPage, screenMetrics } from '../lib/geometry';
+import type { Piece } from '../lib/pockets';
 import { endDrag, peekDrag, readDrag, startDrag } from '../lib/dnd';
 import { useImageUrl } from '../lib/useImage';
 import { clamp } from '../lib/util';
@@ -11,79 +12,108 @@ export type Pending =
   | { kind: 'move'; placementId: string; spanCols: number; spanRows: number }
   | null;
 
-function Card({
+/** One piece of a placement: the part of the image that fills these pockets. */
+function CardPiece({
   placement,
+  piece,
+  box,
   selected,
   draggable,
   onActivate,
 }: {
   placement: Placement;
+  piece: Piece;
+  box: { w: number; h: number };
   selected: boolean;
   draggable: boolean;
+  /** Reports the pocket that was tapped, in page coordinates. */
   onActivate: (col: number, row: number) => void;
 }) {
   const { binder } = useBinder();
   const item = binder.library.find((i) => i.id === placement.itemId);
   const url = useImageUrl(item?.image);
-  const spans = placement.spanCols * placement.spanRows;
+  const ghost = item?.owned === false;
+  const pockets = piece.spanCols * piece.spanRows;
+
+  // Where this piece sits inside the placement, counted in pockets.
+  const offsetCol = piece.page === placement.page ? piece.col - placement.col : binder.cols - placement.col + piece.col;
+  const offsetRow = piece.row - placement.row;
+
+  function pocketUnder(e: React.MouseEvent | React.DragEvent) {
+    const b = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const local = {
+      col: clamp(Math.floor(((e.clientX - b.left) / b.width) * piece.spanCols), 0, piece.spanCols - 1),
+      row: clamp(Math.floor(((e.clientY - b.top) / b.height) * piece.spanRows), 0, piece.spanRows - 1),
+    };
+    return {
+      page: { col: piece.col + local.col, row: piece.row + local.row },
+      // Which pocket of the placement was grabbed, so a drag keeps its position.
+      grab: { col: offsetCol + local.col, row: offsetRow + local.row },
+    };
+  }
 
   return (
     <button
       type="button"
-      className={`card ${selected ? 'sel' : ''}`}
+      className={`card ${selected ? 'sel' : ''} ${ghost ? 'ghost' : ''}`}
+      data-placement={placement.id}
       style={{
-        gridColumn: `${placement.col + 1} / span ${placement.spanCols}`,
-        gridRow: `${placement.row + 1} / span ${placement.spanRows}`,
+        gridColumn: `${piece.col + 1} / span ${piece.spanCols}`,
+        gridRow: `${piece.row + 1} / span ${piece.spanRows}`,
       }}
       draggable={draggable}
       onDragStart={(e) => {
         // No state updates here: a re-render during dragstart cancels the drag.
-        const box = e.currentTarget.getBoundingClientRect();
+        const { grab } = pocketUnder(e);
         startDrag(e, {
           source: 'placement',
           placementId: placement.id,
           kind: placement.kind,
           spanCols: placement.spanCols,
           spanRows: placement.spanRows,
-          grabCol: clamp(
-            Math.floor(((e.clientX - box.left) / box.width) * placement.spanCols),
-            0,
-            placement.spanCols - 1,
-          ),
-          grabRow: clamp(
-            Math.floor(((e.clientY - box.top) / box.height) * placement.spanRows),
-            0,
-            placement.spanRows - 1,
-          ),
+          grabCol: grab.col,
+          grabRow: grab.row,
         });
       }}
       onDragEnd={endDrag}
       onClick={(e) => {
         e.stopPropagation();
-        onActivate(placement.col, placement.row);
+        const { page: pocket } = pocketUnder(e);
+        onActivate(pocket.col, pocket.row);
       }}
       aria-label={item?.name ?? 'Card'}
     >
       {url ? (
-        <img
-          src={url}
-          alt=""
+        <span
+          className="art"
           style={{
-            objectFit: placement.fit,
-            objectPosition: `${placement.focusX}% ${placement.focusY}%`,
-            transform: placement.rotation ? `rotate(${placement.rotation}deg)` : undefined,
+            left: `${(-piece.x / piece.w) * 100}%`,
+            top: `${(-piece.y / piece.h) * 100}%`,
+            width: `${(box.w / piece.w) * 100}%`,
+            height: `${(box.h / piece.h) * 100}%`,
           }}
-        />
+        >
+          <img
+            src={url}
+            alt=""
+            style={{
+              objectFit: placement.fit,
+              objectPosition: `${placement.focusX}% ${placement.focusY}%`,
+              transform: placement.rotation ? `rotate(${placement.rotation}deg)` : undefined,
+            }}
+          />
+        </span>
       ) : (
         <span className="card-missing">{item?.name ?? 'Image missing'}</span>
       )}
-      {spans > 1 && (
+      {pockets > 1 && (
         <span className="seams" aria-hidden>
-          {Array.from({ length: spans }, (_, i) => (
-            <i key={i} style={{ width: `${100 / placement.spanCols}%`, height: `${100 / placement.spanRows}%` }} />
+          {Array.from({ length: pockets }, (_, i) => (
+            <i key={i} style={{ width: `${100 / piece.spanCols}%`, height: `${100 / piece.spanRows}%` }} />
           ))}
         </span>
       )}
+      {ghost && <span className="ghost-tag">need</span>}
     </button>
   );
 }
@@ -100,10 +130,10 @@ export default function PageView({
 }: {
   page: number | null;
   caption: string;
-  hint: boolean;
   selectedId: string | null;
   pending: Pending;
   allowDrag: boolean;
+  hint: boolean;
   onSelect: (id: string | null) => void;
   onPocket: (page: number, col: number, row: number) => void;
 }) {
@@ -117,7 +147,20 @@ export default function PageView({
     ok: boolean;
   } | null>(null);
 
-  const placements = page === null ? [] : binder.placements.filter((p) => p.page === page);
+  const style = pageStyle(binder);
+  const metrics = screenMetrics(binder);
+
+  // Everything showing on this page, including art running in across the spine.
+  const drawn = useMemo(() => {
+    if (page === null) return [];
+    return placementsOnPage(binder, page).flatMap((placement) => {
+      const laid = layoutPlacement(binder, placement, metrics);
+      return laid.pieces
+        .filter((piece) => piece.page === page)
+        .map((piece) => ({ placement, piece, box: { w: laid.boxW, h: laid.boxH } }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binder, page]);
 
   function cellFrom(e: React.DragEvent) {
     const el = gridRef.current;
@@ -135,15 +178,8 @@ export default function PageView({
     spanRows: number,
     grab: { col: number; row: number },
   ) {
-    return {
-      col: clamp(cell.col - grab.col, 0, Math.max(0, binder.cols - spanCols)),
-      row: clamp(cell.row - grab.row, 0, Math.max(0, binder.rows - spanRows)),
-    };
-  }
-
-  function activate(col: number, row: number) {
-    if (page === null) return;
-    onPocket(page, col, row);
+    if (page === null) return { col: 0, row: 0 };
+    return anchorAt(binder, page, cell, { spanCols, spanRows }, grab);
   }
 
   return (
@@ -154,9 +190,9 @@ export default function PageView({
         style={{
           gridTemplateColumns: `repeat(${binder.cols}, 1fr)`,
           gridTemplateRows: `repeat(${binder.rows}, 1fr)`,
-          aspectRatio: `${pageAspect(binder.cols, binder.rows)}`,
-          gap: `${PAGE_GAP * 100}cqw`,
-          padding: `${PAGE_PAD * 100}cqw`,
+          aspectRatio: `${style.aspect}`,
+          gap: `${style.gap * 100}cqw`,
+          padding: `${style.pad * 100}cqw`,
         }}
         onDragOver={(e) => {
           if (page === null) return;
@@ -173,7 +209,7 @@ export default function PageView({
           setGhost({
             col,
             row,
-            spanCols: payload.spanCols,
+            spanCols: Math.min(payload.spanCols, binder.cols - col),
             spanRows: payload.spanRows,
             ok: canDrop(binder, { page, col, row, spanCols: payload.spanCols, spanRows: payload.spanRows }, except),
           });
@@ -212,26 +248,31 @@ export default function PageView({
                 style={{ gridColumn: col + 1, gridRow: row + 1 }}
                 tabIndex={pending ? 0 : -1}
                 aria-label={`Pocket ${col + 1}, ${row + 1}`}
-                onClick={() => (pending ? activate(col, row) : onSelect(null))}
+                onClick={() => (pending ? onPocket(page, col, row) : onSelect(null))}
               />
             );
           })}
 
-        {placements.map((p) => (
-          <Card
-            key={p.id}
-            placement={p}
-            selected={p.id === selectedId}
+        {drawn.map(({ placement, piece, box }) => (
+          <CardPiece
+            key={`${placement.id}-${piece.col}-${piece.row}`}
+            placement={placement}
+            piece={piece}
+            box={box}
+            selected={placement.id === selectedId}
             draggable={allowDrag}
-            onActivate={(col, row) => (pending ? activate(col, row) : onSelect(p.id))}
+            onActivate={(col, row) => {
+              if (pending && page !== null) onPocket(page, col, row);
+              else onSelect(placement.id);
+            }}
           />
         ))}
 
         {ghost && (
           <div
-            className={`ghost ${ghost.ok ? 'ok' : 'no'}`}
+            className={`ghost-drop ${ghost.ok ? 'ok' : 'no'}`}
             style={{
-              gridColumn: `${ghost.col + 1} / span ${ghost.spanCols}`,
+              gridColumn: `${ghost.col + 1} / span ${Math.max(1, ghost.spanCols)}`,
               gridRow: `${ghost.row + 1} / span ${ghost.spanRows}`,
             }}
             aria-hidden
@@ -246,7 +287,7 @@ export default function PageView({
           </div>
         )}
       </div>
-      <p className="page-cap">{caption}</p>
+      {caption && <p className="page-cap">{caption}</p>}
     </section>
   );
 }

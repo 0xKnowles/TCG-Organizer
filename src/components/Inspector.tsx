@@ -1,6 +1,7 @@
 import type { Placement } from '../types';
 import { useBinder } from '../store';
-import { canDrop, firstFreeSlot } from '../lib/geometry';
+import { canDrop, firstFreeSlot, layoutPlacement } from '../lib/geometry';
+import { printMetrics } from '../lib/pockets';
 import { useImageUrl } from '../lib/useImage';
 
 export default function Inspector({
@@ -51,6 +52,17 @@ export default function Inspector({
     const spot = firstFreeSlot(binder, page, placement.spanCols, placement.spanRows);
     if (spot) dispatch({ type: 'movePlacement', id: placement.id, page, col: spot.col, row: spot.row });
   }
+
+  // How this footprint turns into paper: one piece per pocket, unless the
+  // pockets have facing openings, and never across the spine.
+  const laid = layoutPlacement(binder, placement, printMetrics(binder));
+  const printNote = [
+    `${laid.pieces.length} ${laid.pieces.length === 1 ? 'piece' : 'pieces'} to print`,
+    laid.hasUncutPair ? 'facing pockets stay whole' : null,
+    laid.crossesSpine ? 'crosses the spine' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <div className="inspector" role="dialog" aria-label="Placement settings" onClick={(e) => e.stopPropagation()}>
@@ -108,6 +120,7 @@ export default function Inspector({
               +
             </button>
           </div>
+          <span className="note">{printNote}</span>
         </div>
 
         <div className="insp-line">

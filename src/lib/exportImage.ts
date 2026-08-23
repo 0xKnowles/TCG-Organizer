@@ -1,8 +1,7 @@
 import type { Binder, ImageSrc, Placement } from '../types';
-import { CARD_ASPECT, PAGE_GAP, PAGE_PAD, pocketWidth } from './geometry';
+import { PAGE_PAD, gapRatio, pocketWidth, placementsOnPage, layoutPlacement } from './geometry';
+import { cardAspect, printMetrics } from './pockets';
 import { blobUrl } from './idb';
-
-const SPREAD_GUTTER = 0.22; // gutter between two pages, as a fraction of slot width
 
 async function resolve(src: ImageSrc | undefined): Promise<string | undefined> {
   if (!src) return undefined;
@@ -19,46 +18,53 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function drawCover(
+/** Draw one piece of a placement: the image is fitted to the whole box, then clipped. */
+function drawPiece(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
   p: Placement,
-  radius = 0,
+  frame: { x: number; y: number; w: number; h: number },
+  box: { x: number; y: number; w: number; h: number },
+  radius: number,
 ) {
   ctx.save();
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, radius);
+  ctx.roundRect(frame.x, frame.y, frame.w, frame.h, radius);
   ctx.clip();
-  const scale = p.fit === 'cover' ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height);
+  const scale =
+    p.fit === 'cover'
+      ? Math.max(box.w / img.width, box.h / img.height)
+      : Math.min(box.w / img.width, box.h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
-  const dx = x + (w - dw) * (p.fit === 'cover' ? p.focusX / 100 : 0.5);
-  const dy = y + (h - dh) * (p.fit === 'cover' ? p.focusY / 100 : 0.5);
+  const dx = box.x + (box.w - dw) * (p.fit === 'cover' ? p.focusX / 100 : 0.5);
+  const dy = box.y + (box.h - dh) * (p.fit === 'cover' ? p.focusY / 100 : 0.5);
   if (p.rotation) {
-    ctx.translate(x + w / 2, y + h / 2);
+    ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
     ctx.rotate((p.rotation * Math.PI) / 180);
-    ctx.translate(-(x + w / 2), -(y + h / 2));
+    ctx.translate(-(box.x + box.w / 2), -(box.y + box.h / 2));
   }
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();
 }
 
 /**
- * Render one or two pages to a PNG. Remote card art is requested with CORS;
- * if a host refuses, that card is drawn as an empty slot rather than
- * poisoning the whole export.
+ * Render one or two pages to a PNG, using the same piece geometry as the screen
+ * so a welded seam hides its strip of art and a facing pair stays continuous.
+ * Remote art is requested with CORS; if a host refuses, that card is skipped
+ * rather than poisoning the whole export.
  */
 export async function renderPagesToPng(binder: Binder, pages: (number | null)[], slotWidth = 420): Promise<Blob> {
-  const slotH = slotWidth / CARD_ASPECT;
-  const pageW = slotWidth / pocketWidth(binder.cols);
-  const gap = PAGE_GAP * pageW;
+  const ratio = gapRatio(binder);
+  const pocket = pocketWidth(binder.cols, ratio);
+  const pageW = slotWidth / pocket;
   const pad = PAGE_PAD * pageW;
+  const gap = slotWidth * ratio;
+  const slotH = slotWidth / cardAspect(binder);
   const pageH = 2 * pad + binder.rows * slotH + (binder.rows - 1) * gap;
-  const gutter = pages.length > 1 ? SPREAD_GUTTER * slotWidth : 0;
+  const metrics = printMetrics(binder);
+  const mmToPx = slotWidth / metrics.cardW;
+  const gutter = pages.length > 1 ? metrics.spine * mmToPx : 0;
 
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(pageW * pages.length + gutter);
@@ -69,62 +75,68 @@ export async function renderPagesToPng(binder: Binder, pages: (number | null)[],
   ctx.fillStyle = '#111110';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  const originOf = (index: number) => index * (pageW + gutter);
+  const slotXY = (pageIndex: number, col: number, row: number) => ({
+    x: originOf(pageIndex) + pad + col * (slotWidth + gap),
+    y: pad + row * (slotH + gap),
+  });
+  const radius = slotWidth * 0.03;
+
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
-    const originX = i * (pageW + gutter);
-
     ctx.fillStyle = '#1c1c1b';
-    ctx.fillRect(originX, 0, pageW, pageH);
+    ctx.fillRect(originOf(i), 0, pageW, pageH);
     if (page === null) continue;
 
-    const slotXY = (col: number, row: number) => ({
-      x: originX + pad + col * (slotWidth + gap),
-      y: pad + row * (slotH + gap),
-    });
-
-    const radius = slotWidth * 0.03;
-
-    // Empty pockets first.
     ctx.fillStyle = '#262624';
     for (let row = 0; row < binder.rows; row++) {
       for (let col = 0; col < binder.cols; col++) {
-        const { x, y } = slotXY(col, row);
+        const { x, y } = slotXY(i, col, row);
         ctx.beginPath();
         ctx.roundRect(x, y, slotWidth, slotH, radius);
         ctx.fill();
       }
     }
+  }
 
-    const onPage = binder.placements.filter((p) => p.page === page);
-    for (const p of onPage) {
-      const item = binder.library.find((it) => it.id === p.itemId);
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    if (page === null) continue;
+
+    for (const placement of placementsOnPage(binder, page)) {
+      const item = binder.library.find((it) => it.id === placement.itemId);
       if (!item) continue;
       const url = await resolve(item.image);
       if (!url) continue;
-      const { x, y } = slotXY(p.col, p.row);
-      const w = p.spanCols * slotWidth + (p.spanCols - 1) * gap;
-      const h = p.spanRows * slotH + (p.spanRows - 1) * gap;
+      const laid = layoutPlacement(binder, placement, { ...metrics, gap: metrics.gap, spine: metrics.spine });
+      let img: HTMLImageElement;
       try {
-        const img = await loadImage(url);
-        drawCover(ctx, img, x, y, w, h, p, radius);
+        img = await loadImage(url);
       } catch {
-        /* skip images the browser will not hand us */
+        continue; // a host that refuses CORS is skipped, not fatal
       }
-    }
 
-    // Pocket seams across multi-slot art, the way a real page divides it.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.13)';
-    ctx.lineWidth = Math.max(1, slotWidth * 0.004);
-    for (const p of onPage) {
-      if (p.spanCols * p.spanRows < 2) continue;
-      for (let r = 0; r < p.spanRows; r++) {
-        for (let c = 0; c < p.spanCols; c++) {
-          const { x, y } = slotXY(p.col + c, p.row + r);
-          ctx.beginPath();
-          ctx.roundRect(x, y, slotWidth, slotH, radius);
-          ctx.stroke();
-        }
+      // Cards you do not own yet show as ghosts, the way they do on screen.
+      ctx.globalAlpha = item.owned === false ? 0.26 : 1;
+      for (const piece of laid.pieces) {
+        if (piece.page !== page) continue;
+        const anchor = slotXY(i, piece.col, piece.row);
+        const frame = {
+          x: anchor.x,
+          y: anchor.y,
+          w: piece.spanCols * slotWidth + (piece.spanCols - 1) * gap,
+          h: piece.spanRows * slotH + (piece.spanRows - 1) * gap,
+        };
+        // The image box, positioned so this piece shows its own part of it.
+        const box = {
+          x: anchor.x - piece.x * mmToPx,
+          y: anchor.y - piece.y * mmToPx,
+          w: laid.boxW * mmToPx,
+          h: laid.boxH * mmToPx,
+        };
+        drawPiece(ctx, img, placement, frame, box, radius);
       }
+      ctx.globalAlpha = 1;
     }
   }
 

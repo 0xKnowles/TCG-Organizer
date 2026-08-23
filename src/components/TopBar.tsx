@@ -3,6 +3,9 @@ import { useBinder, useBinderCtx } from '../store';
 import { exportBinder, importBinder } from '../lib/transfer';
 import { renderPagesToPng } from '../lib/exportImage';
 import { download, slugify } from '../lib/util';
+import { toCsv } from '../lib/csv';
+import { physical } from '../lib/pockets';
+import type { PocketOpenings } from '../types';
 
 export type ViewMode = 'single' | 'spread';
 
@@ -58,6 +61,22 @@ export default function TopBar({
     } finally {
       setBusy(null);
     }
+  }
+
+  const needed = binder.library.filter((i) => i.owned === false);
+
+  function saveWantList() {
+    const rows: (string | number)[][] = [
+      ['Quantity', 'Name', 'Set', 'Number'],
+      ...needed.map((i) => [
+        i.kind === 'card' ? (i.quantity ?? 1) : 1,
+        i.name,
+        i.kind === 'card' ? (i.setName ?? '') : '',
+        i.kind === 'card' ? (i.number ?? '') : '',
+      ]),
+    ];
+    download(new Blob([toCsv(rows)], { type: 'text/csv' }), `${slugify(binder.name)}-want-list.csv`);
+    setOpen(false);
   }
 
   async function openFile(file: File) {
@@ -155,6 +174,25 @@ export default function TopBar({
                     />
                     Page 1 on its own
                   </label>
+                  <span className="sect">Pocket openings</span>
+                  <div className="seg wrap">
+                    {(
+                      [
+                        ['uniform', 'Same way'],
+                        ['rows', 'Rows face'],
+                        ['columns', 'Cols face'],
+                      ] as [PocketOpenings, string][]
+                    ).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        aria-pressed={physical(binder).openings === id}
+                        onClick={() => dispatch({ type: 'setPhysical', patch: { openings: id } })}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <hr />
@@ -216,6 +254,9 @@ export default function TopBar({
                 </button>
                 <button type="button" role="menuitem" onClick={saveJson} disabled={busy === 'json'}>
                   Save to file <span>.json</span>
+                </button>
+                <button type="button" role="menuitem" disabled={!needed.length} onClick={saveWantList}>
+                  Export want list <span>{needed.length || ''}</span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => fileRef.current?.click()}>
                   Open file

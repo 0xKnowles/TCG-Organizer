@@ -1,22 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { PocketOpenings } from '../types';
 import { useBinder } from '../store';
 import { blobUrl } from '../lib/idb';
+import { physical } from '../lib/pockets';
 import {
   CARD_SIZES,
   DEFAULT_PRINT_OPTIONS,
   PAPERS,
   buildTiles,
-  chunk,
   cutGuides,
   dpiGrade,
+  packSheets,
   sheetLayout,
   type Natural,
+  type PlacedTile,
   type PrintOptions,
-  type PrintTile,
+  type Sheet,
+  type SheetLayout,
 } from '../lib/print';
 
 const OPTIONS_STORAGE = 'binder-studio:print-options';
+
+const OPENING_MODES: { id: PocketOpenings; label: string; hint: string }[] = [
+  {
+    id: 'uniform',
+    label: 'All the same way',
+    hint: 'Every pocket loads from the same edge. Each pocket takes its own piece.',
+  },
+  {
+    id: 'rows',
+    label: 'Rows face',
+    hint: 'Rows 1&2, 3&4 open towards each other, so a two-pocket tall piece slides in whole.',
+  },
+  {
+    id: 'columns',
+    label: 'Columns face',
+    hint: 'Columns 1&2, 3&4 open towards each other, so a two-pocket wide piece slides in whole.',
+  },
+];
 
 function loadOptions(): PrintOptions {
   try {
@@ -72,22 +94,27 @@ function useNaturals(itemIds: string[]) {
   return { naturals, loading };
 }
 
-function Tile({
-  tile,
-  url,
-  card,
-  labels,
-  index,
-}: {
-  tile: PrintTile;
-  url?: string;
-  card: { w: number; h: number };
-  labels: boolean;
-  index: number;
-}) {
+function CutLayer({ sheet, layout, stroke }: { sheet: Sheet; layout: SheetLayout; stroke: number }) {
   return (
-    <div className="tile-wrap">
-      <div className="tile" style={{ width: `${card.w}mm`, height: `${card.h}mm` }}>
+    <svg
+      className="cut-layer"
+      width={`${layout.pageW}mm`}
+      height={`${layout.pageH}mm`}
+      viewBox={`0 0 ${layout.pageW} ${layout.pageH}`}
+      aria-hidden
+    >
+      {cutGuides(sheet, layout).map((line, i) => (
+        <line key={i} {...line} strokeWidth={stroke} strokeDasharray="2 1.5" />
+      ))}
+    </svg>
+  );
+}
+
+function Tile({ placed, url, labels }: { placed: PlacedTile; url?: string; labels: boolean }) {
+  const { tile } = placed;
+  return (
+    <div className="tile-wrap" style={{ left: `${placed.x}mm`, top: `${placed.y}mm` }}>
+      <div className="tile" style={{ width: `${tile.w}mm`, height: `${tile.h}mm` }}>
         {url && (
           <img
             src={url}
@@ -105,47 +132,26 @@ function Tile({
       </div>
       {labels && (
         <span className="tile-label">
-          {index}. {tile.label}
+          {placed.index}. {tile.label}
+          {tile.uncut ? ' · do not cut' : ''}
         </span>
       )}
     </div>
   );
 }
 
-/** Dashed cut lines drawn over a sheet, in millimetre user units. */
-function CutLayer({
-  layout,
-  options,
-  tiles,
-  stroke,
-}: {
-  layout: ReturnType<typeof sheetLayout>;
-  options: PrintOptions;
-  tiles: number;
-  stroke: number;
-}) {
-  return (
-    <svg
-      className="cut-layer"
-      width={`${layout.pageW}mm`}
-      height={`${layout.pageH}mm`}
-      viewBox={`0 0 ${layout.pageW} ${layout.pageH}`}
-      aria-hidden
-    >
-      {cutGuides(layout, options, tiles).map((line, i) => (
-        <line key={i} {...line} strokeWidth={stroke} strokeDasharray="2 1.5" />
-      ))}
-    </svg>
-  );
-}
-
 export default function PrintDialog({ onClose }: { onClose: () => void }) {
-  const { binder } = useBinder();
+  const { binder, dispatch } = useBinder();
+  const phys = physical(binder);
   const [options, setOptions] = useState<PrintOptions>(loadOptions);
   const [selected, setSelected] = useState<Set<string>>(() => {
     // Default to what you actually have to print: your own images and art.
     const placed = new Set(binder.placements.map((p) => p.itemId));
-    return new Set(binder.library.filter((i) => placed.has(i.id) && (i.origin ?? 'upload') !== 'api').map((i) => i.id));
+    return new Set(
+      binder.library
+        .filter((i) => placed.has(i.id) && (i.origin ?? 'upload') !== 'api' && i.owned !== false)
+        .map((i) => i.id),
+    );
   });
   const previewRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -161,7 +167,7 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
     }
     return binder.library
       .filter((i) => counts.has(i.id) && i.image)
-      .map((i) => ({ item: i, pieces: counts.get(i.id) ?? 0 }));
+      .map((i) => ({ item: i, pockets: counts.get(i.id) ?? 0 }));
   }, [binder.library, binder.placements]);
 
   const selectedIds = useMemo(
@@ -170,12 +176,10 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
   );
   const { naturals, loading } = useNaturals(selectedIds);
 
-  const layout = useMemo(() => sheetLayout(options), [options]);
-  const tiles = useMemo(
-    () => buildTiles(binder, new Set(selectedIds), naturals, options),
-    [binder, selectedIds, naturals, options],
-  );
-  const sheets = useMemo(() => chunk(tiles, layout.perSheet), [tiles, layout.perSheet]);
+  const layout = useMemo(() => sheetLayout(binder, options), [binder, options]);
+  const tiles = useMemo(() => buildTiles(binder, new Set(selectedIds), naturals), [binder, selectedIds, naturals]);
+  const sheets = useMemo(() => packSheets(tiles, layout), [tiles, layout]);
+  const uncutCount = tiles.filter((t) => t.uncut).length;
 
   // Fit a sheet to the preview column; printing ignores this transform.
   useEffect(() => {
@@ -192,11 +196,11 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
 
   // 0.25 mm on paper, but never thinner than a screen pixel in the scaled preview.
   const strokeMm = Math.max(0.25, 1 / (scale * (96 / 25.4)));
-
   const worst = tiles.reduce((min, t) => Math.min(min, t.dpi), Infinity);
   const paper = PAPERS.find((p) => p.id === options.paperId) ?? PAPERS[0];
+  const setPhysical = (patch: Parameters<typeof dispatch>[0] extends never ? never : Partial<typeof phys>) =>
+    dispatch({ type: 'setPhysical', patch });
 
-  // Rendered outside the app so printing can hide the app entirely.
   return createPortal(
     <div className="print-dialog" role="dialog" aria-label="Print sheets">
       <style>{`@page { size: ${paper.id === 'a4' ? 'A4' : 'letter'} ${options.landscape ? 'landscape' : 'portrait'}; margin: 0; }`}</style>
@@ -245,8 +249,8 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
                 <button
                   key={c.id}
                   type="button"
-                  aria-pressed={options.card.w === c.w && options.card.h === c.h}
-                  onClick={() => setOptions({ ...options, card: { w: c.w, h: c.h } })}
+                  aria-pressed={phys.card.w === c.w && phys.card.h === c.h}
+                  onClick={() => setPhysical({ card: { w: c.w, h: c.h } })}
                 >
                   {c.label}
                 </button>
@@ -260,10 +264,8 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
                   step={0.5}
                   min={20}
                   max={120}
-                  value={options.card.w}
-                  onChange={(e) =>
-                    setOptions({ ...options, card: { ...options.card, w: Number(e.target.value) || 63 } })
-                  }
+                  value={phys.card.w}
+                  onChange={(e) => setPhysical({ card: { ...phys.card, w: Number(e.target.value) || 63 } })}
                 />
               </label>
               <label className="field inline">
@@ -273,34 +275,55 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
                   step={0.5}
                   min={20}
                   max={160}
-                  value={options.card.h}
-                  onChange={(e) =>
-                    setOptions({ ...options, card: { ...options.card, h: Number(e.target.value) || 88 } })
-                  }
+                  value={phys.card.h}
+                  onChange={(e) => setPhysical({ card: { ...phys.card, h: Number(e.target.value) || 88 } })}
                 />
               </label>
             </div>
           </div>
 
           <div className="opt">
-            <span className="sect">Pocket divider</span>
+            <span className="sect">Pockets</span>
+            <div className="seg wrap">
+              {OPENING_MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  aria-pressed={phys.openings === m.id}
+                  onClick={() => setPhysical({ openings: m.id })}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <p className="note">{OPENING_MODES.find((m) => m.id === phys.openings)?.hint}</p>
             <div className="insp-line">
               <label className="field inline">
-                <span>Gap mm</span>
+                <span>Divider mm</span>
                 <input
                   type="number"
                   step={0.5}
                   min={0}
                   max={12}
-                  value={options.pocketGap}
-                  onChange={(e) => setOptions({ ...options, pocketGap: Math.max(0, Number(e.target.value) || 0) })}
+                  value={phys.pocketGap}
+                  onChange={(e) => setPhysical({ pocketGap: Math.max(0, Number(e.target.value) || 0) })}
+                />
+              </label>
+              <label className="field inline">
+                <span>Spine mm</span>
+                <input
+                  type="number"
+                  step={1}
+                  min={0}
+                  max={80}
+                  value={phys.spineGap}
+                  onChange={(e) => setPhysical({ spineGap: Math.max(0, Number(e.target.value) || 0) })}
                 />
               </label>
             </div>
             <p className="note">
-              Measure the black strip between two pockets. Art that spans pockets is laid out across the whole span and
-              the strips hidden behind a divider are dropped, so lines stay straight across the seam. Set 0 to slice the
-              image into equal pieces instead.
+              Measure the strip between two pockets, and the gap across the spine when the binder lies open. Art laid
+              across a divider loses the strip hidden behind it; art across facing openings stays whole.
             </p>
           </div>
 
@@ -327,7 +350,7 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
           <div className="opt">
             <span className="sect">What to print</span>
             <ul className="print-list">
-              {placedItems.map(({ item, pieces }) => {
+              {placedItems.map(({ item, pockets }) => {
                 const tileDpi = tiles.find((t) => t.itemId === item.id)?.dpi;
                 return (
                   <li key={item.id}>
@@ -345,8 +368,9 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
                       <span className="print-item">
                         <b>{item.name}</b>
                         <small>
-                          {pieces} {pieces === 1 ? 'piece' : 'pieces'}
+                          {pockets} {pockets === 1 ? 'pocket' : 'pockets'}
                           {item.origin === 'api' ? ' · from search' : ''}
+                          {item.owned === false ? ' · not owned' : ''}
                           {tileDpi ? ` · ${Math.round(tileDpi)} dpi` : ''}
                         </small>
                       </span>
@@ -360,7 +384,8 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
 
           <p className="note">
             {tiles.length} {tiles.length === 1 ? 'piece' : 'pieces'} on {sheets.length}{' '}
-            {sheets.length === 1 ? 'sheet' : 'sheets'} · {layout.cols} × {layout.rows} per sheet
+            {sheets.length === 1 ? 'sheet' : 'sheets'}
+            {uncutCount ? ` · ${uncutCount} slide in whole` : ''}
             {loading ? ' · measuring images' : ''}
           </p>
           {Number.isFinite(worst) && dpiGrade(worst) !== 'good' && (
@@ -376,34 +401,28 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
 
         <div className="print-preview" ref={previewRef}>
           <div className="print-scale" style={{ ['--print-scale' as string]: scale }}>
-            {sheets.map((sheetTiles, sheetIndex) => (
+            {sheets.map((sheet, sheetIndex) => (
               <div
                 key={sheetIndex}
                 className="sheet"
                 style={{ width: `${layout.pageW}mm`, height: `${layout.pageH}mm` }}
               >
-                <div className="sheet-inner" style={{ padding: `${layout.marginY}mm ${layout.marginX}mm` }}>
+                <div className="sheet-inner">
+                  {sheet.tiles.map((placed) => (
+                    <Tile
+                      key={placed.tile.id}
+                      placed={placed}
+                      url={naturals.get(placed.tile.itemId)?.url}
+                      labels={options.labels}
+                    />
+                  ))}
                   <div
-                    className="sheet-grid"
-                    style={{
-                      gridTemplateColumns: `repeat(${layout.cols}, ${options.card.w}mm)`,
-                      gap: `${layout.gap}mm`,
-                    }}
+                    className="sheet-foot"
+                    style={{ height: `${layout.footer}mm`, left: `${layout.marginX}mm`, right: `${layout.marginX}mm` }}
                   >
-                    {sheetTiles.map((tile, i) => (
-                      <Tile
-                        key={tile.id}
-                        tile={tile}
-                        url={naturals.get(tile.itemId)?.url}
-                        card={options.card}
-                        labels={options.labels}
-                        index={sheetIndex * layout.perSheet + i + 1}
-                      />
-                    ))}
-                  </div>
-                  <div className="sheet-foot" style={{ height: `${layout.footer}mm` }}>
                     <span>
-                      {binder.name} · sheet {sheetIndex + 1} of {sheets.length} · {options.card.w} × {options.card.h} mm
+                      {binder.name} · sheet {sheetIndex + 1} of {sheets.length} · {phys.card.w} × {phys.card.h} mm
+                      {sheet.tiles.some((t) => t.tile.uncut) ? ' · pieces marked “do not cut” slide in whole' : ''}
                     </span>
                     <span className="ruler" aria-hidden>
                       <i />
@@ -411,9 +430,7 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
                     </span>
                   </div>
                 </div>
-                {options.cutLines && (
-                  <CutLayer layout={layout} options={options} tiles={sheetTiles.length} stroke={strokeMm} />
-                )}
+                {options.cutLines && <CutLayer sheet={sheet} layout={layout} stroke={strokeMm} />}
               </div>
             ))}
             {!sheets.length && <p className="note">Nothing selected to print.</p>}

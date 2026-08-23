@@ -179,6 +179,9 @@ input[type='number'] {
   border-radius: var(--r);
   overflow: hidden;
 }
+.seg.wrap {
+  flex-wrap: wrap;
+}
 .seg button {
   min-height: 32px;
   padding: 0 12px;
@@ -537,10 +540,37 @@ input.title-input:hover {
   background: var(--pocket);
   box-shadow: inset 0 0 0 1px var(--pocket-line);
 }
+.card .art {
+  position: absolute;
+  display: block;
+}
 .card img {
   display: block;
   width: 100%;
   height: 100%;
+  pointer-events: none;
+}
+.card.ghost .art {
+  opacity: 0.26;
+  filter: saturate(0.5);
+}
+.card.ghost {
+  box-shadow:
+    inset 0 0 0 1px var(--pocket-line),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.14);
+}
+.ghost-tag {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: max(8px, 0.55em);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   pointer-events: none;
 }
 .card.sel {
@@ -572,15 +602,15 @@ input.title-input:hover {
   border-radius: 2px;
 }
 
-.ghost {
+.ghost-drop {
   pointer-events: none;
   border-radius: 3px;
 }
-.ghost.ok {
+.ghost-drop.ok {
   box-shadow: inset 0 0 0 2px var(--focus);
   background: rgba(47, 111, 228, 0.14);
 }
-.ghost.no {
+.ghost-drop.no {
   box-shadow: inset 0 0 0 2px var(--danger);
   background: rgba(180, 39, 27, 0.14);
 }
@@ -1059,9 +1089,6 @@ input.title-input:hover {
   .canvas {
     padding: 18px;
   }
-  .spread {
-    gap: 14px;
-  }
 }
 
 /* ------------------------------ print sheets ----------------------------- */
@@ -1180,17 +1207,9 @@ input.title-input:hover {
 .sheet-inner {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-}
-.sheet-grid {
-  display: grid;
-  align-content: start;
-  justify-content: center;
-  flex: 1 1 auto;
 }
 .tile-wrap {
-  position: relative;
+  position: absolute;
 }
 .tile {
   position: relative;
@@ -1221,8 +1240,8 @@ input.title-input:hover {
   font-variant-numeric: tabular-nums;
 }
 .sheet-foot {
-  flex: 0 0 auto;
-  margin-top: auto;
+  position: absolute;
+  bottom: 4mm;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -1311,4 +1330,71 @@ input.title-input:hover {
   .cut-layer line {
     stroke-width: 0.25;
   }
+}
+
+/* ------------------------- library: needed + csv ------------------------- */
+.item-flag {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  margin-right: 2px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0;
+}
+.item-row:hover .item-flag,
+.item-flag:focus-visible,
+.item-flag[aria-pressed='true'] {
+  opacity: 1;
+}
+.item-flag[aria-pressed='true'] {
+  border-color: var(--line-2);
+  background: var(--panel-2);
+  color: var(--ink);
+}
+@media (pointer: coarse) {
+  .item-flag {
+    opacity: 1;
+    padding: 6px 9px;
+  }
+}
+.library-sub .count {
+  margin-left: auto;
+}
+
+.csv-text {
+  width: 100%;
+  min-height: 84px;
+  padding: 8px 9px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+.csv-map {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.csv-map select {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 6px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+}
+.csv-map .field.inline {
+  gap: 6px;
+}
+.csv-map .field.inline > span {
+  min-width: 52px;
+  font-size: 11.5px;
 }

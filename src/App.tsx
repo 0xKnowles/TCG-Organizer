@@ -7,7 +7,7 @@ import TopBar, { type ViewMode } from './components/TopBar';
 import PrintDialog from './components/PrintDialog';
 import type { LibraryItem } from './types';
 import { useBinderCtx } from './store';
-import { canDrop, pageAspect, spreadCount, spreadPages } from './lib/geometry';
+import { anchorAt, canDrop, pageAspect, spineFraction, spreadCount, spreadPages } from './lib/geometry';
 import { useMediaQuery } from './lib/useMediaQuery';
 import { clamp } from './lib/util';
 
@@ -50,12 +50,14 @@ function Workspace() {
   const spreadWidth = useMemo(() => {
     if (!binder || !box.width || !box.height) return undefined;
     const caption = mode === 'spread' ? 24 : 0;
-    const gap = wide ? 14 : 10;
-    const aspect = pageAspect(binder.cols, binder.rows);
+    const aspect = pageAspect(binder);
     const gridHeight = Math.max(80, box.height - caption);
-    const byHeight = gridHeight * aspect * pages.length + gap * (pages.length - 1);
-    return Math.min(byHeight, box.width);
-  }, [binder, box, pages.length, mode, wide]);
+    const pageWidth = gridHeight * aspect;
+    // The gap between pages stands in for the binder's spine.
+    const gap = pages.length > 1 ? pageWidth * spineFraction(binder) : 0;
+    const byHeight = pageWidth * pages.length + gap * (pages.length - 1);
+    return { width: Math.min(byHeight, box.width), gap: gap * Math.min(1, box.width / byHeight) };
+  }, [binder, box, pages.length, mode]);
 
   const clearPending = useCallback(() => {
     setPending(null);
@@ -84,9 +86,8 @@ function Workspace() {
     (page: number, col: number, row: number) => {
       if (!pending || !binder) return;
       const { spanCols, spanRows } = pending;
-      // Keep a multi-pocket footprint on the page, the way a drag does.
-      const anchorCol = clamp(col, 0, binder.cols - spanCols);
-      const anchorRow = clamp(row, 0, binder.rows - spanRows);
+      // Snap the footprint the same way a drag does — it may cross the spine.
+      const { col: anchorCol, row: anchorRow } = anchorAt(binder, page, { col, row }, { spanCols, spanRows });
       const except = pending.kind === 'move' ? pending.placementId : undefined;
       if (!canDrop(binder, { page, col: anchorCol, row: anchorRow, spanCols, spanRows }, except)) {
         setPlaceError(`No room for ${spanCols}×${spanRows} there`);
@@ -203,7 +204,10 @@ function Workspace() {
           </div>
 
           <div className="canvas" ref={canvasRef} onClick={() => setSelectedId(null)}>
-            <div className="spread" style={spreadWidth ? { width: spreadWidth } : { visibility: 'hidden' }}>
+            <div
+              className={`spread ${mode === 'spread' ? 'is-spread' : ''}`}
+              style={spreadWidth ? { width: spreadWidth.width, gap: spreadWidth.gap } : { visibility: 'hidden' }}
+            >
               {pages.map((page, i) => (
                 <PageView
                   key={`${page}-${i}`}

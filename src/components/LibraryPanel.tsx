@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ArtItem, CardItem, LibraryItem } from '../types';
 import { useBinder } from '../store';
-import { searchCards } from '../lib/api';
+import { lookupCards, searchCards } from '../lib/api';
+import { type ColumnMap, type Field, guessColumns, looksLikeHeader, parseCsv, readRows } from '../lib/csv';
 import { putBlob } from '../lib/idb';
 import { normalizeImage, uid } from '../lib/util';
 import { startDrag, endDrag } from '../lib/dnd';
@@ -25,13 +26,163 @@ function Thumb({ item, className }: { item: LibraryItem; className: string }) {
 }
 
 function subtitle(item: LibraryItem): string {
-  if (item.kind === 'art') return `Art · ${item.spanCols}×${item.spanRows}`;
-  return [item.setName, item.number && `No. ${item.number}`].filter(Boolean).join(' · ') || 'Card';
+  const base =
+    item.kind === 'art'
+      ? `Art · ${item.spanCols}×${item.spanRows}`
+      : [item.setName, item.number && `No. ${item.number}`].filter(Boolean).join(' · ') || 'Card';
+  return item.owned === false ? `${base} · needed` : base;
+}
+
+/* --------------------------------- csv ---------------------------------- */
+
+function CsvImport({ onDone }: { onDone: () => void }) {
+  const { dispatch } = useBinder();
+  const [text, setText] = useState('');
+  const [map, setMap] = useState<ColumnMap>({});
+  const [hasHeader, setHasHeader] = useState(true);
+  const [lookUp, setLookUp] = useState(true);
+  const [asNeeded, setAsNeeded] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const grid = useMemo(() => (text.trim() ? parseCsv(text) : []), [text]);
+
+  function load(next: string) {
+    setText(next);
+    setError(null);
+    const rows = parseCsv(next);
+    if (!rows.length) return;
+    const header = looksLikeHeader(rows[0]);
+    setHasHeader(header);
+    setMap(header ? guessColumns(rows[0]) : { name: 0 });
+  }
+
+  const rows = useMemo(() => (grid.length ? readRows(grid, map, hasHeader) : []), [grid, map, hasHeader]);
+  const headings = grid.length ? grid[0].map((h, i) => (hasHeader ? h || `Column ${i + 1}` : `Column ${i + 1}`)) : [];
+
+  async function run() {
+    if (!rows.length) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setError(null);
+    try {
+      let matches: (CardItem | undefined)[] = [];
+      if (lookUp) {
+        setProgress('Looking up cards…');
+        matches = await lookupCards(rows, {
+          apiKey: localStorage.getItem(API_KEY_STORAGE) ?? undefined,
+          signal: controller.signal,
+          onProgress: (done, total) => setProgress(`Looking up ${done} of ${total} names…`),
+        });
+      }
+      const items: LibraryItem[] = rows.map((row, i) => {
+        const found = matches[i];
+        return {
+          id: uid('card'),
+          kind: 'card',
+          origin: 'csv',
+          name: found?.name ?? row.name,
+          setName: found?.setName ?? row.setName,
+          number: found?.number ?? row.number,
+          image: found?.image,
+          quantity: row.quantity,
+          owned: asNeeded ? false : row.quantity === 0 ? false : undefined,
+        } satisfies CardItem;
+      });
+      dispatch({ type: 'addItems', items });
+      setProgress(null);
+      onDone();
+    } catch (err) {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Import failed.');
+      setProgress(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="add-row">
+        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+          Choose CSV
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv,text/plain"
+          hidden
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (file) load(await file.text());
+            e.target.value = '';
+          }}
+        />
+      </div>
+      <textarea
+        className="csv-text"
+        value={text}
+        onChange={(e) => load(e.target.value)}
+        placeholder={'…or paste rows here\nQuantity,Name,Set,Card Number\n1,Lapras,Jungle,25'}
+        rows={4}
+      />
+
+      {grid.length > 0 && (
+        <>
+          <label className="check">
+            <input type="checkbox" checked={hasHeader} onChange={(e) => setHasHeader(e.target.checked)} />
+            First row is a header
+          </label>
+          <div className="csv-map">
+            {(['name', 'set', 'number', 'quantity'] as Field[]).map((field) => (
+              <label key={field} className="field inline">
+                <span>{field === 'set' ? 'Set' : field[0].toUpperCase() + field.slice(1)}</span>
+                <select
+                  value={map[field] ?? -1}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setMap({ ...map, [field]: value < 0 ? undefined : value });
+                  }}
+                >
+                  <option value={-1}>—</option>
+                  {headings.map((h, i) => (
+                    <option key={i} value={i}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={lookUp} onChange={(e) => setLookUp(e.target.checked)} />
+            Find images on pokemontcg.io
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={asNeeded} onChange={(e) => setAsNeeded(e.target.checked)} />
+            This is a want list (mark every card as needed)
+          </label>
+          <p className="note">
+            {rows.length} {rows.length === 1 ? 'card' : 'cards'} ready
+            {rows[0] ? ` · first: ${rows[0].name}` : ''}
+          </p>
+        </>
+      )}
+
+      {progress && <p className="note">{progress}</p>}
+      {error && <p className="warn">{error}</p>}
+      <div>
+        <button type="button" className="btn btn-primary" disabled={!rows.length || !!progress} onClick={run}>
+          Import {rows.length || ''}
+        </button>
+      </div>
+    </>
+  );
 }
 
 /* --------------------------------- add ---------------------------------- */
 
-type Source = 'search' | 'upload' | 'link';
+type Source = 'search' | 'upload' | 'link' | 'csv';
 
 function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean }) {
   const { dispatch } = useBinder();
@@ -166,6 +317,9 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
           <button type="button" aria-pressed={source === 'link'} onClick={() => setSource('link')}>
             Link
           </button>
+          <button type="button" aria-pressed={source === 'csv'} onClick={() => setSource('csv')}>
+            CSV
+          </button>
         </div>
       </div>
 
@@ -215,14 +369,16 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
           </>
         )}
 
-        {source !== 'search' && (
+        {source === 'csv' && <CsvImport onDone={onDone} />}
+
+        {(source === 'upload' || source === 'link') && (
           <div className="insp-line">
             <span className="sect">Type</span>
             {typeToggle}
           </div>
         )}
 
-        {source !== 'search' && asArt && (
+        {(source === 'upload' || source === 'link') && asArt && (
           <div className="spans">
             {SPANS.map((s) => (
               <button
@@ -312,7 +468,7 @@ export default function LibraryPanel({
   const { binder, dispatch } = useBinder();
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState('');
-  const [unplacedOnly, setUnplacedOnly] = useState(false);
+  const [scope, setScope] = useState<'all' | 'unplaced' | 'needed'>('all');
 
   const placed = useMemo(() => {
     const counts = new Map<string, number>();
@@ -320,16 +476,19 @@ export default function LibraryPanel({
     return counts;
   }, [binder.placements]);
 
+  const needed = binder.library.filter((i) => i.owned === false).length;
+
   const items = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     return binder.library.filter((i) => {
-      if (unplacedOnly && placed.get(i.id)) return false;
+      if (scope === 'unplaced' && placed.get(i.id)) return false;
+      if (scope === 'needed' && i.owned !== false) return false;
       if (!needle) return true;
       return (
         i.name.toLowerCase().includes(needle) || (i.kind === 'card' && (i.setName ?? '').toLowerCase().includes(needle))
       );
     });
-  }, [binder.library, filter, unplacedOnly, placed]);
+  }, [binder.library, filter, scope, placed]);
 
   return (
     <div className="library" data-open={open}>
@@ -354,11 +513,14 @@ export default function LibraryPanel({
           </div>
 
           <div className="library-sub">
-            <span className="sect">Library</span>
-            <label className="check">
-              <input type="checkbox" checked={unplacedOnly} onChange={(e) => setUnplacedOnly(e.target.checked)} />
-              Unplaced
-            </label>
+            <div className="seg">
+              {(['all', 'unplaced', 'needed'] as const).map((s) => (
+                <button key={s} type="button" aria-pressed={scope === s} onClick={() => setScope(s)}>
+                  {s === 'all' ? 'All' : s === 'unplaced' ? 'Unplaced' : 'Needed'}
+                </button>
+              ))}
+            </div>
+            <span className="sect count">{needed} needed</span>
           </div>
 
           <ul className="items">

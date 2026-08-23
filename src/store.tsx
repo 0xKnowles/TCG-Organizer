@@ -26,6 +26,7 @@ export type Action =
   | { type: 'rename'; name: string }
   | { type: 'setLayout'; cols: number; rows: number }
   | { type: 'setFirstPageAlone'; value: boolean }
+  | { type: 'setPhysical'; patch: Partial<Pick<Binder, 'card' | 'pocketGap' | 'spineGap' | 'openings'>> }
   | { type: 'addItems'; items: LibraryItem[] }
   | { type: 'updateItem'; id: string; patch: Partial<CardItem> & Partial<ArtItem> }
   | { type: 'removeItem'; id: string }
@@ -60,13 +61,23 @@ export function reducer(state: Binder, action: Action): Binder {
     case 'setLayout': {
       const cols = clamp(Math.round(action.cols), 1, 8);
       const rows = clamp(Math.round(action.rows), 1, 8);
+      const next = { ...state, cols, rows };
       // Anything that no longer fits the new grid goes back to the library.
-      const placements = state.placements.filter((p) => inBounds(rectOf(p), cols, rows));
-      return touch({ ...state, cols, rows, placements });
+      return touch({ ...next, placements: state.placements.filter((p) => inBounds(next, rectOf(p))) });
     }
 
-    case 'setFirstPageAlone':
-      return touch({ ...state, firstPageAlone: action.value });
+    case 'setFirstPageAlone': {
+      // Which pages face each other changes, so art across the spine may no
+      // longer line up. Pull those back onto a single page rather than lie.
+      const next = { ...state, firstPageAlone: action.value };
+      const placements = next.placements.map((p) =>
+        inBounds(next, rectOf(p)) ? p : { ...p, spanCols: Math.max(1, next.cols - p.col) },
+      );
+      return touch({ ...next, placements });
+    }
+
+    case 'setPhysical':
+      return touch({ ...state, ...action.patch });
 
     case 'addItems':
       return touch({ ...state, library: [...action.items, ...state.library] });
@@ -105,7 +116,7 @@ export function reducer(state: Binder, action: Action): Binder {
       const rect = { page: action.page, col: action.col, row: action.row, spanCols, spanRows };
       if (!canDrop(state, rect)) return state;
       // A 1x1 drop onto an occupied slot replaces what was there.
-      const displaced = occupantsOf(state.placements, rect).map((p) => p.id);
+      const displaced = occupantsOf(state, rect).map((p) => p.id);
       const placement: Placement = {
         id: uid('pl'),
         itemId: item.id,
@@ -137,7 +148,7 @@ export function reducer(state: Binder, action: Action): Binder {
         spanRows: moving.spanRows,
       };
       if (!canDrop(state, rect, moving.id)) return state;
-      const other = occupantsOf(state.placements, rect, moving.id)[0];
+      const other = occupantsOf(state, rect, moving.id)[0];
       const placements = state.placements.map((p) => {
         if (p.id === moving.id) return { ...p, page: action.page, col: action.col, row: action.row };
         // Single-slot collisions swap seats instead of failing.

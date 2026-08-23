@@ -15,8 +15,15 @@ including fan art and photos that span two or more pockets.
 - **Exact placement.** Pick a card and tap the pocket you want. On a desktop you
   can drag instead, and drop one card onto another to swap them.
 - **Multi-pocket art.** Give a photo or piece of art a footprint — 2 wide, 2 tall,
-  2×2, up to a whole page — and it renders as one image across those pockets with
-  the pocket seams drawn over it. Resize, pan, or rotate it afterwards.
+  2×2, up to a whole page — and it lays out across those pockets exactly as the
+  binder will show it, dividers and all. Art can also run across the spine onto
+  the facing page.
+- **Card library from a CSV.** Import an export from Deckbox, TCGplayer, Collectr
+  or a spreadsheet; the columns are detected for you and images are looked up by
+  name, set and number.
+- **Cards you don't own yet.** Mark an item as needed and it sits in its pocket as
+  a ghost, so a master-set binder shows its holes. Export the needed cards as a
+  want list.
 - **Binder view.** One page at a time, or a left/right spread, with an option for
   page 1 to sit alone the way a binder opens on its cover.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
@@ -49,29 +56,64 @@ Node 20+. The build output is static, so any file host will serve it.
 
 ## Printing to size
 
-**Binder menu → Print sheets.** Each pocket holds its own piece of paper, so a
-mural covering four pockets prints as four separate tiles, each exactly one card
-in size. Every tile is labelled with the pocket it belongs in (`P1 · C2 R1`), and
-they are laid out in the order you would fill the binder.
+**Binder menu → Print sheets.** A pocket holds one piece of paper, so art
+covering four pockets normally prints as four separate pieces, each exactly one
+card in size. Every piece is labelled with the pocket it belongs in
+(`P1 · C2 R1`), and they come out in the order you would fill the binder.
 
-**Set the pocket divider.** Measure the black strip between two pockets on your
-binder — usually 3–5 mm — and put that in the _Gap_ field. The art is then laid
-out across the full span the binder gives it, dividers included, and the strips
-that would sit behind a divider are simply not printed. A horizon or a road runs
-straight across the seam instead of jumping. Set the gap to `0` to slice the
-image into equal pieces instead, which keeps every pixel but shifts the halves
-apart by the width of the divider.
+**Pockets that face each other.** On many pages — 12-pocket ones especially —
+pairs of pockets have their openings facing, with no welded divider between them.
+A piece of art covering that pair slides in as one uncut strip. Tell the app how
+your pages are built (Binder menu → _Pocket openings_, or the Pockets section of
+the print dialog) and it prints those pairs as a single piece marked _do not
+cut_, keeping the strip of art a divider would have hidden. Anything separated by
+a weld, or by the spine, is still split into one piece per pocket.
+
+**Measure your binder.** The _Divider_ field is the strip between two pockets on
+a page, usually 3–5 mm; _Spine_ is the gap across the middle when the binder lies
+open. Art laid across a divider is positioned across the whole span, dividers
+included, and the strip that sits behind one is simply not printed — so a horizon
+runs straight across the seam instead of jumping. Set the divider to `0` to slice
+into equal pieces instead, keeping every pixel but shifting the halves apart.
+These measurements also shape the pages on screen, so the plan is a scale drawing
+of the real thing.
+
+**Cutting.** Every piece gets a dashed line around it, and lines run the length
+of the sheet and a few millimetres past the outermost pieces, so you can lay a
+ruler along one and cut a whole row in a single pass. Lines never cross a piece,
+so a two-pocket piece stays whole. Cut on every line: the thin strips between
+pieces are waste, and cutting both sides of each piece means a wandering cut can
+never eat into the one next to it.
 
 **When you print:** choose _Scale 100%_ (not "Fit to page") and _Margins: None_.
 Every sheet carries a 50 mm ruler — measure it once with a real ruler and you
-know your printer is honest. Sheets are US Letter (6 tiles) or A4 (9 tiles), and
-card size can be standard 63 × 88 mm, Japanese 59 × 86 mm, or anything you type.
+know your printer is honest. Sheets are US Letter or A4, and card size can be
+standard 63 × 88 mm, Japanese 59 × 86 mm, or anything you type.
 
 The panel shows the resolution each image lands at once printed. Below roughly
 180 dpi a photo starts to look soft at card size; 300 dpi is comfortable.
 
 By default only your own images and art are selected — cards you found through
-search are already in your hands, but you can tick them too if you want proxies.
+search are already in your hands, and cards marked as needed are not yet.
+
+## Importing a collection
+
+**Add → CSV** takes an export from Deckbox, TCGplayer, Collectr, Dragon Shield or
+a plain spreadsheet. Paste the rows or pick the file; the header is matched
+against the usual column names and you can correct the mapping by hand. Names are
+then looked up in batches on pokemontcg.io and narrowed by set and card number,
+so most rows arrive with the right artwork. Rows that match nothing still come in
+by name, ready to place.
+
+A row with a quantity of `0`, or the whole file if you tick _this is a want
+list_, arrives marked as needed.
+
+## Cards you don't own yet
+
+Mark any item as **needed** in the library and every pocket holding it shows a
+ghost: the art at a quarter strength with a small tag. A master-set binder can
+then be laid out in full, holes and all. **Export want list** in the binder menu
+writes the needed cards to a CSV you can take shopping.
 
 ## How it fits together
 
