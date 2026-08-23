@@ -1398,3 +1398,54 @@ input.title-input:hover {
   min-width: 52px;
   font-size: 11.5px;
 }
+
+/* --------------------------- pocket openings ---------------------------- */
+.openings {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+.openings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.openings-row.is-derived {
+  opacity: 0.65;
+}
+.openings-label {
+  flex: 0 0 auto;
+  width: 74px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.openings-arrows {
+  display: flex;
+  gap: 3px;
+}
+.opening {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1;
+}
+button.opening {
+  cursor: pointer;
+}
+button.opening:hover {
+  border-color: var(--ink-3);
+  background: var(--panel-2);
+}
+.openings-pairs {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}

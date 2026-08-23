@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ArtItem, Binder, CardItem, LibraryItem, Placement } from './types';
 import { canDrop, firstFreeSlot, inBounds, occupantsOf, rectOf } from './lib/geometry';
+import { defaultOpenings, physical } from './lib/pockets';
 import { allKeys, deleteBlob } from './lib/idb';
 import { clamp, uid } from './lib/util';
 
@@ -13,7 +14,8 @@ export function makeBinder(cols: number, rows: number, name = 'My Binder'): Bind
     cols,
     rows,
     pageCount: 4,
-    firstPageAlone: false,
+    // A binder opens on its front page, alone on the right.
+    firstPageAlone: true,
     library: [],
     placements: [],
     updatedAt: Date.now(),
@@ -26,7 +28,10 @@ export type Action =
   | { type: 'rename'; name: string }
   | { type: 'setLayout'; cols: number; rows: number }
   | { type: 'setFirstPageAlone'; value: boolean }
-  | { type: 'setPhysical'; patch: Partial<Pick<Binder, 'card' | 'pocketGap' | 'spineGap' | 'openings'>> }
+  | {
+      type: 'setPhysical';
+      patch: Partial<Pick<Binder, 'card' | 'pocketGap' | 'spineGap' | 'pocketOpenings'>>;
+    }
   | { type: 'addItems'; items: LibraryItem[] }
   | { type: 'updateItem'; id: string; patch: Partial<CardItem> & Partial<ArtItem> }
   | { type: 'removeItem'; id: string }
@@ -38,6 +43,14 @@ export type Action =
   | { type: 'removePlacement'; id: string }
   | { type: 'clearPage'; page: number }
   | { type: 'autoFill'; page: number };
+
+/** Keep the opening pattern the same length as the row when the grid changes. */
+function resizeOpenings(binder: Binder, cols: number): Binder['pocketOpenings'] {
+  const current = physical(binder).openings;
+  if (cols === current.length) return current;
+  const fallback = defaultOpenings(cols);
+  return fallback.map((side, i) => (i < cols - 1 && i < current.length - 1 ? current[i] : side));
+}
 
 function touch(b: Binder): Binder {
   return { ...b, updatedAt: Date.now() };
@@ -61,7 +74,7 @@ export function reducer(state: Binder, action: Action): Binder {
     case 'setLayout': {
       const cols = clamp(Math.round(action.cols), 1, 8);
       const rows = clamp(Math.round(action.rows), 1, 8);
-      const next = { ...state, cols, rows };
+      const next = { ...state, cols, rows, pocketOpenings: resizeOpenings(state, cols) };
       // Anything that no longer fits the new grid goes back to the library.
       return touch({ ...next, placements: state.placements.filter((p) => inBounds(next, rectOf(p))) });
     }

@@ -54,11 +54,12 @@ export interface Placement {
 }
 
 /**
- * How a page's pockets are built. Two pockets whose openings face each other
- * take a single uncut piece of art; anything else is separated by a welded
- * seam and needs one piece per pocket.
+ * Which edge a pocket loads from. Pockets open at the side, never the top or
+ * bottom, so only side-by-side pockets can have their openings facing each
+ * other — a pair like that takes one uncut piece of art. Two pockets stacked
+ * vertically are always separated by a weld and always need cutting.
  */
-export type PocketOpenings = 'uniform' | 'rows' | 'columns';
+export type Opening = 'left' | 'right';
 
 export interface Binder {
   id: string;
@@ -72,7 +73,11 @@ export interface Binder {
   pocketGap?: number;
   /** Millimetres between the facing pockets either side of the spine. */
   spineGap?: number;
-  openings?: PocketOpenings;
+  /**
+   * Opening side of each column, for a right-hand page. A left-hand page is the
+   * other face of the same sheet, so its pattern is this one mirrored.
+   */
+  pocketOpenings?: Opening[];
   /** Real binders open on a single page 1, then true left/right spreads. */
   firstPageAlone: boolean;
   library: LibraryItem[];

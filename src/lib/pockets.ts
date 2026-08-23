@@ -1,27 +1,68 @@
-import type { Binder, Placement, PocketOpenings } from '../types';
+import type { Binder, Opening, Placement } from '../types';
 
 /** Physical measurements of the binder, in millimetres. */
 export interface Physical {
   card: { w: number; h: number };
   pocketGap: number;
   spineGap: number;
-  openings: PocketOpenings;
+  /** Opening side of each column on a right-hand page. */
+  openings: Opening[];
 }
 
-export const DEFAULT_PHYSICAL: Physical = {
+/**
+ * The usual build: on a right-hand page every pocket loads from its right edge
+ * except the outermost one, which loads from the left — so the last two pockets
+ * of each row open towards each other. Mirrored onto a left-hand page that
+ * becomes the first two pockets.
+ */
+export function defaultOpenings(cols: number): Opening[] {
+  return Array.from({ length: cols }, (_, i) => (i === cols - 1 ? 'left' : 'right'));
+}
+
+export const DEFAULT_PHYSICAL: Omit<Physical, 'openings'> = {
   card: { w: 63, h: 88 },
   pocketGap: 4,
   spineGap: 24,
-  openings: 'uniform',
 };
 
 export function physical(binder: Binder): Physical {
+  const stored = binder.pocketOpenings;
+  const openings =
+    Array.isArray(stored) && stored.length === binder.cols && stored.every((o) => o === 'left' || o === 'right')
+      ? stored
+      : defaultOpenings(binder.cols);
   return {
     card: binder.card ?? DEFAULT_PHYSICAL.card,
     pocketGap: binder.pocketGap ?? DEFAULT_PHYSICAL.pocketGap,
     spineGap: binder.spineGap ?? DEFAULT_PHYSICAL.spineGap,
-    openings: binder.openings ?? DEFAULT_PHYSICAL.openings,
+    openings,
   };
+}
+
+const flip = (o: Opening): Opening => (o === 'left' ? 'right' : 'left');
+
+/**
+ * The opening pattern as seen on one page. A left-hand page is the back of the
+ * same sheet, so the welds sit in the same physical places but left and right
+ * swap: its pattern is the right-hand one mirrored.
+ */
+export function openingsOn(binder: Binder, leftHandPage: boolean): Opening[] {
+  const openings = physical(binder).openings;
+  return leftHandPage ? [...openings].reverse().map(flip) : openings;
+}
+
+/** Pockets whose openings meet, as 1-based column pairs — used for the hints. */
+export function facingPairs(openings: Opening[]): [number, number][] {
+  const pairs: [number, number][] = [];
+  for (let i = 1; i < openings.length; i++) {
+    if (openings[i - 1] === 'right' && openings[i] === 'left') pairs.push([i, i + 1]);
+  }
+  return pairs;
+}
+
+export function pairsLabel(openings: Opening[]): string {
+  const pairs = facingPairs(openings);
+  return pairs.length ? pairs.map(([a, b]) => `${a}–${b}`).join(', ') : 'none';
 }
 
 export function cardAspect(binder: Binder): number {
@@ -37,14 +78,19 @@ export function cardAspect(binder: Binder): number {
  */
 export type Boundary = 'facing' | 'seam' | 'spine';
 
-/** The boundary immediately left of column `col` on a page. */
-export function columnBoundary(binder: Binder, col: number): Boundary {
-  return physical(binder).openings === 'columns' && col % 2 === 1 ? 'facing' : 'seam';
+/** The boundary immediately left of column `col`, on the page it belongs to. */
+export function columnBoundary(binder: Binder, leftHandPage: boolean, col: number): Boundary {
+  const openings = openingsOn(binder, leftHandPage);
+  return openings[col - 1] === 'right' && openings[col] === 'left' ? 'facing' : 'seam';
 }
 
-/** The boundary immediately above row `row`. */
-export function rowBoundary(binder: Binder, row: number): Boundary {
-  return physical(binder).openings === 'rows' && row % 2 === 1 ? 'facing' : 'seam';
+/**
+ * The boundary immediately above `row`. Always a seam: pockets open at the
+ * side, so two pockets stacked on top of each other are never continuous and
+ * art spanning them has to be cut.
+ */
+export function rowBoundary(): Boundary {
+  return 'seam';
 }
 
 /** Distances used to lay a placement out: millimetres in print, page fractions on screen. */
@@ -101,7 +147,12 @@ function runs(count: number, isFacing: (index: number) => boolean): Run[] {
  * one its rect within the placement's whole image box. Screen rendering and
  * print slicing both use this, so a plan and its print always agree.
  */
-export function layoutPlacement(binder: Binder, placement: Placement, m: Metrics): PlacementLayout {
+export function layoutPlacement(
+  binder: Binder,
+  placement: Placement,
+  m: Metrics,
+  isLeftHandPage: (page: number) => boolean,
+): PlacementLayout {
   // Which page and column each column of the footprint lands on.
   const columns = Array.from({ length: placement.spanCols }, (_, i) => {
     const abs = placement.col + i;
@@ -111,7 +162,9 @@ export function layoutPlacement(binder: Binder, placement: Placement, m: Metrics
   });
 
   const colBoundary = (i: number): Boundary =>
-    columns[i].page !== columns[i - 1].page ? 'spine' : columnBoundary(binder, columns[i].col);
+    columns[i].page !== columns[i - 1].page
+      ? 'spine'
+      : columnBoundary(binder, isLeftHandPage(columns[i].page), columns[i].col);
 
   const xs: number[] = [0];
   for (let i = 1; i < columns.length; i++) {
@@ -121,7 +174,7 @@ export function layoutPlacement(binder: Binder, placement: Placement, m: Metrics
   for (let j = 1; j < placement.spanRows; j++) ys.push(ys[j - 1] + m.cardH + m.gap);
 
   const colRuns = runs(columns.length, (i) => colBoundary(i) === 'facing');
-  const rowRuns = runs(placement.spanRows, (j) => rowBoundary(binder, placement.row + j) === 'facing');
+  const rowRuns = runs(placement.spanRows, () => rowBoundary() === 'facing');
 
   const pieces: Piece[] = [];
   for (const r of rowRuns) {

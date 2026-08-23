@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PocketOpenings } from '../types';
 import { useBinder } from '../store';
 import { blobUrl } from '../lib/idb';
 import { physical } from '../lib/pockets';
+import OpeningsEditor from './OpeningsEditor';
 import {
   CARD_SIZES,
   DEFAULT_PRINT_OPTIONS,
@@ -21,24 +21,6 @@ import {
 } from '../lib/print';
 
 const OPTIONS_STORAGE = 'binder-studio:print-options';
-
-const OPENING_MODES: { id: PocketOpenings; label: string; hint: string }[] = [
-  {
-    id: 'uniform',
-    label: 'All the same way',
-    hint: 'Every pocket loads from the same edge. Each pocket takes its own piece.',
-  },
-  {
-    id: 'rows',
-    label: 'Rows face',
-    hint: 'Rows 1&2, 3&4 open towards each other, so a two-pocket tall piece slides in whole.',
-  },
-  {
-    id: 'columns',
-    label: 'Columns face',
-    hint: 'Columns 1&2, 3&4 open towards each other, so a two-pocket wide piece slides in whole.',
-  },
-];
 
 function loadOptions(): PrintOptions {
   try {
@@ -284,46 +266,11 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
 
           <div className="opt">
             <span className="sect">Pockets</span>
-            <div className="seg wrap">
-              {OPENING_MODES.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  aria-pressed={phys.openings === m.id}
-                  onClick={() => setPhysical({ openings: m.id })}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <p className="note">{OPENING_MODES.find((m) => m.id === phys.openings)?.hint}</p>
-            <div className="insp-line">
-              <label className="field inline">
-                <span>Divider mm</span>
-                <input
-                  type="number"
-                  step={0.5}
-                  min={0}
-                  max={12}
-                  value={phys.pocketGap}
-                  onChange={(e) => setPhysical({ pocketGap: Math.max(0, Number(e.target.value) || 0) })}
-                />
-              </label>
-              <label className="field inline">
-                <span>Spine mm</span>
-                <input
-                  type="number"
-                  step={1}
-                  min={0}
-                  max={80}
-                  value={phys.spineGap}
-                  onChange={(e) => setPhysical({ spineGap: Math.max(0, Number(e.target.value) || 0) })}
-                />
-              </label>
-            </div>
+            <OpeningsEditor />
             <p className="note">
               Measure the strip between two pockets, and the gap across the spine when the binder lies open. Art laid
-              across a divider loses the strip hidden behind it; art across facing openings stays whole.
+              across a divider loses the strip hidden behind it; art across facing openings stays whole. Pockets load
+              from the side, so art stacked vertically is always cut.
             </p>
           </div>
 

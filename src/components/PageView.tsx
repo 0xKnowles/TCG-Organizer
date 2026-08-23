@@ -248,7 +248,13 @@ export default function PageView({
                 style={{ gridColumn: col + 1, gridRow: row + 1 }}
                 tabIndex={pending ? 0 : -1}
                 aria-label={`Pocket ${col + 1}, ${row + 1}`}
-                onClick={() => (pending ? onPocket(page, col, row) : onSelect(null))}
+                onClick={(e) => {
+                  // Stop here: the canvas clears the selection on click, which
+                  // would immediately deselect what we just placed or moved.
+                  e.stopPropagation();
+                  if (pending) onPocket(page, col, row);
+                  else onSelect(null);
+                }}
               />
             );
           })}

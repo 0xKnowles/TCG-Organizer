@@ -1,5 +1,5 @@
 import type { Binder, Placement, Rect } from '../types';
-import { cardAspect, layoutPlacement, physical, type Metrics } from './pockets';
+import { cardAspect, layoutPlacement as layoutPieces, physical, type Metrics } from './pockets';
 
 /** Page border, as a fraction of the page's width. */
 export const PAGE_PAD = 0.034;
@@ -62,10 +62,24 @@ export function rectsOf(binder: Binder, rect: Rect): Rect[] {
   ];
 }
 
-/** True when this page is the left half of a spread, so art can cross the spine. */
-export function canSpanSpine(binder: Binder, page: number): boolean {
-  if (page + 1 >= binder.pageCount) return false;
+/**
+ * True when this page sits on the left of a spread. A binder opens on its front
+ * page alone on the right, so with that setting the left-hand pages are the odd
+ * ones. Which side a page is on decides its pocket openings and whether art can
+ * run across the spine.
+ */
+export function isLeftPage(binder: Binder, page: number): boolean {
   return binder.firstPageAlone ? page % 2 === 1 : page % 2 === 0;
+}
+
+/** True when art on this page can run across the spine onto the facing page. */
+export function canSpanSpine(binder: Binder, page: number): boolean {
+  return page + 1 < binder.pageCount && isLeftPage(binder, page);
+}
+
+/** Slice a placement into printable pieces, resolving each page's opening pattern. */
+export function layoutPlacement(binder: Binder, placement: Placement, m: Metrics) {
+  return layoutPieces(binder, placement, m, (page) => isLeftPage(binder, page));
 }
 
 export function inBounds(binder: Binder, rect: Rect): boolean {
@@ -156,5 +170,3 @@ export function spreadCount(binder: Binder, mode: 'single' | 'spread'): number {
   if (mode === 'single') return binder.pageCount;
   return binder.firstPageAlone ? Math.ceil((binder.pageCount + 1) / 2) : Math.ceil(binder.pageCount / 2);
 }
-
-export { layoutPlacement };

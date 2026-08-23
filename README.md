@@ -24,8 +24,9 @@ including fan art and photos that span two or more pockets.
 - **Cards you don't own yet.** Mark an item as needed and it sits in its pocket as
   a ghost, so a master-set binder shows its holes. Export the needed cards as a
   want list.
-- **Binder view.** One page at a time, or a left/right spread, with an option for
-  page 1 to sit alone the way a binder opens on its cover.
+- **Binder view.** One page at a time, or a left/right spread. A binder opens on
+  its front page alone on the right, which is also what decides whether a page is
+  a left-hand or right-hand one — and so which of its pockets face each other.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
 - **Print to size.** Sheets of tiles at true physical size — 63 × 88 mm by
   default — with dashed cut lines and a label telling you which pocket each piece
@@ -61,13 +62,21 @@ covering four pockets normally prints as four separate pieces, each exactly one
 card in size. Every piece is labelled with the pocket it belongs in
 (`P1 · C2 R1`), and they come out in the order you would fill the binder.
 
-**Pockets that face each other.** On many pages — 12-pocket ones especially —
-pairs of pockets have their openings facing, with no welded divider between them.
-A piece of art covering that pair slides in as one uncut strip. Tell the app how
-your pages are built (Binder menu → _Pocket openings_, or the Pockets section of
-the print dialog) and it prints those pairs as a single piece marked _do not
-cut_, keeping the strip of art a divider would have hidden. Anything separated by
-a weld, or by the spine, is still split into one piece per pocket.
+**Tell it how your pages are built.** Pockets load from the side, never the top
+or bottom. On a 3×3 page the openings usually run → → ← along a right-hand page,
+so the last two pockets of each row open towards each other with no divider
+between them — one piece of art covers that pair uncut. Set the arrows in Binder
+menu → _Pocket openings_ (or the Pockets section of the print dialog) to match
+your binder.
+
+A left-hand page is the back of the same sheet, so its welds sit in the same
+physical places and its pattern is the mirror: → ← ←, pairing the _first_ two
+pockets of each row. The app derives that for you, which is why the same piece of
+art can be uncut on one page and cut on the facing one.
+
+Everything else is one piece per pocket: welded seams, the spine, and any two
+pockets stacked on top of each other — a vertical span is always cut, because no
+pocket opens at its top or bottom edge.
 
 **Measure your binder.** The _Divider_ field is the strip between two pockets on
 a page, usually 3–5 mm; _Spine_ is the gap across the middle when the binder lies

@@ -4,8 +4,7 @@ import { exportBinder, importBinder } from '../lib/transfer';
 import { renderPagesToPng } from '../lib/exportImage';
 import { download, slugify } from '../lib/util';
 import { toCsv } from '../lib/csv';
-import { physical } from '../lib/pockets';
-import type { PocketOpenings } from '../types';
+import OpeningsEditor from './OpeningsEditor';
 
 export type ViewMode = 'single' | 'spread';
 
@@ -175,24 +174,7 @@ export default function TopBar({
                     Page 1 on its own
                   </label>
                   <span className="sect">Pocket openings</span>
-                  <div className="seg wrap">
-                    {(
-                      [
-                        ['uniform', 'Same way'],
-                        ['rows', 'Rows face'],
-                        ['columns', 'Cols face'],
-                      ] as [PocketOpenings, string][]
-                    ).map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        aria-pressed={physical(binder).openings === id}
-                        onClick={() => dispatch({ type: 'setPhysical', patch: { openings: id } })}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <OpeningsEditor />
                 </div>
 
                 <hr />
