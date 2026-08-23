@@ -105,6 +105,38 @@ The panel shows the resolution each image lands at once printed. Below roughly
 By default only your own images and art are selected — cards you found through
 search are already in your hands, and cards marked as needed are not yet.
 
+## Where card data comes from
+
+Searches and CSV lookups go to this app's own `/api/cards` endpoint, not straight
+to a card API. That matters for three reasons: the request is same-origin, so an
+upstream failure can never reach the browser as a CORS error; the API key stays
+on the server; and the endpoint can fall back to a second source when the first
+one is down.
+
+Two sources are tried in order:
+
+1. **[pokemontcg.io](https://pokemontcg.io)** — optionally with a key. It has
+   been returning 5xx since the service moved to Scrydex, and its error
+   responses carry no CORS headers, which is what turns an upstream 500 into a
+   `No 'Access-Control-Allow-Origin' header` message in the console.
+2. **[TCGdex](https://tcgdex.dev)** — free, no key, and it takes over whenever
+   the first source errors or comes back empty.
+
+The search panel reports which source answered, and names the failures when
+neither did.
+
+**Deploying.** The endpoint runs as a serverless function (`api/cards.ts`) on
+Vercel and as a dev-server route locally, so both behave the same. Set
+`POKEMONTCG_API_KEY` in your Vercel project (or `.env.local` for `npm run dev`)
+to use a key — it is optional, and never reaches the browser. On a static host
+with no functions the app notices the endpoint is missing and calls the sources
+directly, which works while they are healthy but is exposed to their CORS
+headers again.
+
+Card images are loaded straight from each source's CDN. That is fine for
+display; PNG export additionally needs the image host to allow CORS, and any
+image whose host refuses is left as an empty pocket.
+
 ## Importing a collection
 
 **Add → CSV** takes an export from Deckbox, TCGplayer, Collectr, Dragon Shield or
@@ -152,9 +184,8 @@ placements too.
 
 ## Notes
 
-- Card data and images come from the community
-  [Pokémon TCG API](https://pokemontcg.io). A key is optional and only raises the
-  rate limit; if you add one it is stored in your browser alone.
+- Card data comes from pokemontcg.io with TCGdex as a fallback, through this
+  app's own `/api/cards` endpoint. See **Where card data comes from**.
 - PNG export asks image hosts for CORS permission. Uploaded images always export;
   a remote image whose host refuses is left as an empty pocket.
 - The screenshot above uses placeholder artwork.

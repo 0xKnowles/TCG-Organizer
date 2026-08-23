@@ -213,12 +213,14 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
     setStatus('loading');
     setMessage('');
     try {
-      const cards = await searchCards(query, {
+      const { items, source, failed } = await searchCards(query, {
         apiKey: apiKey || undefined,
         signal: controller.signal,
       });
-      setResults(cards);
-      setMessage(cards.length ? '' : 'No matches.');
+      setResults(items);
+      if (items.length) setMessage(`${items.length} from ${source === 'tcgdex' ? 'TCGdex' : 'pokemontcg.io'}`);
+      else if (failed.length) setMessage(`No results. ${failed.map((f) => `${f.source} ${f.reason}`).join(', ')}`);
+      else setMessage('No matches.');
     } catch (err) {
       if (!controller.signal.aborted) setMessage(err instanceof Error ? err.message : 'Search failed.');
     } finally {
@@ -362,10 +364,13 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
               </div>
             )}
             <label className="field">
-              <span>API key (optional, raises the rate limit)</span>
+              <span>pokemontcg.io key (optional)</span>
               <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="pokemontcg.io key" />
             </label>
-            <p className="note">Card data from pokemontcg.io.</p>
+            <p className="note">
+              Searches go through this site, which tries pokemontcg.io and falls back to TCGdex. A key is only used when
+              the app has to call the API directly.
+            </p>
           </>
         )}
 

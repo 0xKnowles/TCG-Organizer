@@ -1,7 +1,69 @@
 import type { CardItem } from '../types';
 import { uid } from './util';
+import {
+  searchCards as searchDirect,
+  type CardSource,
+  type FoundCard,
+  type SearchQuery,
+  type SearchResult,
+} from './cardSearch';
 
-const ENDPOINT = 'https://api.pokemontcg.io/v2/cards';
+/**
+ * The app talks to its own /api/cards endpoint, which proxies the card APIs.
+ * Same origin means an upstream failure can never surface as a CORS error, and
+ * the API key stays on the server. When that endpoint is not there — a static
+ * host with no functions — this falls back to calling the sources directly.
+ */
+
+let proxy: boolean | null = null;
+
+function params(query: SearchQuery): string {
+  const search = new URLSearchParams();
+  if (query.q) search.set('q', query.q);
+  if (query.set) search.set('set', query.set);
+  if (query.names?.length) search.set('names', query.names.join('|'));
+  if (query.limit) search.set('limit', String(query.limit));
+  return search.toString();
+}
+
+async function run(query: SearchQuery, opts: SearchOptions): Promise<SearchResult> {
+  if (proxy !== false) {
+    let res: Response | undefined;
+    try {
+      res = await fetch(`/api/cards?${params(query)}`, { signal: opts.signal });
+    } catch (err) {
+      if (opts.signal?.aborted || proxy) throw err;
+      proxy = false; // no endpoint here — fall through and call the sources
+    }
+    if (res) {
+      const isJson = res.headers.get('content-type')?.includes('application/json');
+      if (!isJson || res.status === 404) {
+        // A static host answers /api/cards with the app itself; stop asking.
+        proxy = false;
+      } else {
+        proxy = true;
+        if (res.ok) return (await res.json()) as SearchResult;
+        // The endpoint is there and said no: report that rather than silently
+        // going direct, which is what we are trying to avoid.
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Card search failed (${res.status})`);
+      }
+    }
+  }
+  return searchDirect(query, { apiKey: opts.apiKey, signal: opts.signal });
+}
+
+function toCardItem(card: FoundCard): CardItem {
+  return {
+    id: uid('card'),
+    kind: 'card',
+    origin: 'api',
+    name: card.name,
+    setName: card.setName,
+    number: card.number,
+    image: card.image ? { type: 'remote', url: card.image } : undefined,
+  };
+}
 
 /** Strip the decorations collection exports add, leaving something searchable. */
 function baseName(name: string): string {
@@ -18,12 +80,23 @@ function normalize(name: string): string {
     .replace(/[^a-z0-9 ]/g, '');
 }
 
-interface ApiCard {
-  id: string;
-  name: string;
-  number?: string;
-  set?: { name?: string };
-  images?: { small?: string; large?: string };
+export interface SearchOptions {
+  apiKey?: string;
+  setName?: string;
+  signal?: AbortSignal;
+}
+
+export interface SearchOutcome {
+  items: CardItem[];
+  source: CardSource;
+  failed: SearchResult['failed'];
+}
+
+export async function searchCards(query: string, opts: SearchOptions = {}): Promise<SearchOutcome> {
+  const text = query.trim();
+  if (!text && !opts.setName?.trim()) return { items: [], source: 'pokemontcg', failed: [] };
+  const result = await run({ q: text, set: opts.setName, limit: 36 }, opts);
+  return { items: result.cards.map(toCardItem), source: result.source, failed: result.failed };
 }
 
 export interface LookupRow {
@@ -32,16 +105,6 @@ export interface LookupRow {
   number?: string;
 }
 
-export interface SearchOptions {
-  apiKey?: string;
-  setName?: string;
-  signal?: AbortSignal;
-}
-
-/**
- * Search pokemontcg.io. No key is needed for light use; a key (free from
- * dev.pokemontcg.io) just raises the rate limit and is stored locally.
- */
 /**
  * Look rows from a collection export up in batches, matching on name first and
  * then narrowing by set and card number. Rows with no match come back
@@ -53,24 +116,16 @@ export async function lookupCards(
 ): Promise<(CardItem | undefined)[]> {
   const size = opts.batchSize ?? 8;
   const names = [...new Set(rows.map((r) => normalize(r.name)).filter(Boolean))];
-  const found = new Map<string, ApiCard[]>();
+  const found = new Map<string, FoundCard[]>();
 
   for (let i = 0; i < names.length; i += size) {
     if (opts.signal?.aborted) break;
     const batch = names.slice(i, i + size);
-    const q = batch.map((n) => `name:"${n}"`).join(' OR ');
-    const url = `${ENDPOINT}?q=${encodeURIComponent(q)}&pageSize=250`;
     try {
-      const res = await fetch(url, {
-        signal: opts.signal,
-        headers: opts.apiKey ? { 'X-Api-Key': opts.apiKey } : undefined,
-      });
-      if (res.ok) {
-        const body = (await res.json()) as { data?: ApiCard[] };
-        for (const card of body.data ?? []) {
-          const key = normalize(card.name);
-          found.set(key, [...(found.get(key) ?? []), card]);
-        }
+      const result = await run({ names: batch, limit: 250 }, opts);
+      for (const card of result.cards) {
+        const key = normalize(card.name);
+        found.set(key, [...(found.get(key) ?? []), card]);
       }
     } catch {
       /* a failed batch just means those rows come in without images */
@@ -86,45 +141,11 @@ export async function lookupCards(
     const scored = candidates.map((card) => {
       let score = 0;
       if (wantNumber && card.number?.toLowerCase() === wantNumber) score += 4;
-      if (wantSet && card.set?.name?.toLowerCase().includes(wantSet)) score += 2;
+      if (wantSet && card.setName?.toLowerCase().includes(wantSet)) score += 2;
       if (normalize(card.name) === normalize(row.name)) score += 1;
       return { card, score };
     });
     scored.sort((a, b) => b.score - a.score);
     return toCardItem(scored[0].card);
   });
-}
-
-export async function searchCards(query: string, opts: SearchOptions = {}): Promise<CardItem[]> {
-  const terms: string[] = [];
-  const q = query.trim();
-  if (q) {
-    // A bare number searches by card number, otherwise fuzzy-match the name.
-    if (/^\d+$/.test(q)) terms.push(`number:${q}`);
-    else terms.push(`name:"${q.replace(/"/g, '')}*"`);
-  }
-  if (opts.setName?.trim()) terms.push(`set.name:"${opts.setName.trim().replace(/"/g, '')}*"`);
-  if (!terms.length) return [];
-
-  const url = `${ENDPOINT}?q=${encodeURIComponent(terms.join(' '))}&pageSize=36&orderBy=-set.releaseDate,number`;
-  const res = await fetch(url, {
-    signal: opts.signal,
-    headers: opts.apiKey ? { 'X-Api-Key': opts.apiKey } : undefined,
-  });
-  if (!res.ok) throw new Error(`Card search failed (${res.status})`);
-  const body = (await res.json()) as { data?: ApiCard[] };
-  return (body.data ?? []).map(toCardItem);
-}
-
-function toCardItem(c: ApiCard): CardItem {
-  return {
-    id: uid('card'),
-    kind: 'card',
-    origin: 'api',
-    name: c.name,
-    setName: c.set?.name,
-    number: c.number,
-    image:
-      c.images?.large || c.images?.small ? { type: 'remote', url: (c.images!.large ?? c.images!.small)! } : undefined,
-  };
 }
