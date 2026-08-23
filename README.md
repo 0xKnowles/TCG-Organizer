@@ -21,8 +21,8 @@ including fan art and photos that span two or more pockets.
   page 1 to sit alone the way a binder opens on its cover.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
 - **Print to size.** Sheets of tiles at true physical size — 63 × 88 mm by
-  default — with cut marks and a label telling you which pocket each piece goes
-  in. Art that spans pockets is sliced into one piece per pocket.
+  default — with dashed cut lines and a label telling you which pocket each piece
+  goes in. Art that spans pockets is sliced into one piece per pocket.
 - **Export.** Render the current view to PNG, or save the binder as a file you can
   reopen later.
 

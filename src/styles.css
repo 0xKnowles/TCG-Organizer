@@ -1177,6 +1177,12 @@ input.title-input:hover {
   flex-direction: column;
   overflow: hidden;
 }
+.sheet-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
 .sheet-grid {
   display: grid;
   align-content: start;
@@ -1195,29 +1201,13 @@ input.title-input:hover {
   position: absolute;
   max-width: none;
 }
-.tile .mark {
+.cut-layer {
   position: absolute;
-  background: #9a9a96;
+  inset: 0;
+  pointer-events: none;
 }
-.tile .mark.tl,
-.tile .mark.tr {
-  top: -1.9mm;
-  width: 0.2mm;
-  height: 1.4mm;
-}
-.tile .mark.bl,
-.tile .mark.br {
-  bottom: -1.9mm;
-  width: 0.2mm;
-  height: 1.4mm;
-}
-.tile .mark.tl,
-.tile .mark.bl {
-  left: 0;
-}
-.tile .mark.tr,
-.tile .mark.br {
-  right: 0;
+.cut-layer line {
+  stroke: #6f6f6b;
 }
 .tile-label {
   position: absolute;
@@ -1312,8 +1302,13 @@ input.title-input:hover {
     page-break-after: auto;
   }
   .tile img,
-  .sheet {
+  .sheet,
+  .cut-layer {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  /* On paper a true hairline is enough; the preview needs a thicker line. */
+  .cut-layer line {
+    stroke-width: 0.25;
   }
 }

@@ -8,6 +8,7 @@ import {
   PAPERS,
   buildTiles,
   chunk,
+  cutGuides,
   dpiGrade,
   sheetLayout,
   type Natural,
@@ -75,14 +76,12 @@ function Tile({
   tile,
   url,
   card,
-  cutMarks,
   labels,
   index,
 }: {
   tile: PrintTile;
   url?: string;
   card: { w: number; h: number };
-  cutMarks: boolean;
   labels: boolean;
   index: number;
 }) {
@@ -103,14 +102,6 @@ function Tile({
             }}
           />
         )}
-        {cutMarks && (
-          <>
-            <i className="mark tl" />
-            <i className="mark tr" />
-            <i className="mark bl" />
-            <i className="mark br" />
-          </>
-        )}
       </div>
       {labels && (
         <span className="tile-label">
@@ -118,6 +109,33 @@ function Tile({
         </span>
       )}
     </div>
+  );
+}
+
+/** Dashed cut lines drawn over a sheet, in millimetre user units. */
+function CutLayer({
+  layout,
+  options,
+  tiles,
+  stroke,
+}: {
+  layout: ReturnType<typeof sheetLayout>;
+  options: PrintOptions;
+  tiles: number;
+  stroke: number;
+}) {
+  return (
+    <svg
+      className="cut-layer"
+      width={`${layout.pageW}mm`}
+      height={`${layout.pageH}mm`}
+      viewBox={`0 0 ${layout.pageW} ${layout.pageH}`}
+      aria-hidden
+    >
+      {cutGuides(layout, options, tiles).map((line, i) => (
+        <line key={i} {...line} strokeWidth={stroke} strokeDasharray="2 1.5" />
+      ))}
+    </svg>
   );
 }
 
@@ -171,6 +189,9 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [layout.pageW, layout.pageH]);
+
+  // 0.25 mm on paper, but never thinner than a screen pixel in the scaled preview.
+  const strokeMm = Math.max(0.25, 1 / (scale * (96 / 25.4)));
 
   const worst = tiles.reduce((min, t) => Math.min(min, t.dpi), Infinity);
   const paper = PAPERS.find((p) => p.id === options.paperId) ?? PAPERS[0];
@@ -288,10 +309,10 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
             <label className="check">
               <input
                 type="checkbox"
-                checked={options.cutMarks}
-                onChange={(e) => setOptions({ ...options, cutMarks: e.target.checked })}
+                checked={options.cutLines}
+                onChange={(e) => setOptions({ ...options, cutLines: e.target.checked })}
               />
-              Cut marks
+              Cut lines
             </label>
             <label className="check">
               <input
@@ -359,40 +380,40 @@ export default function PrintDialog({ onClose }: { onClose: () => void }) {
               <div
                 key={sheetIndex}
                 className="sheet"
-                style={{
-                  width: `${layout.pageW}mm`,
-                  height: `${layout.pageH}mm`,
-                  padding: `${layout.marginY}mm ${layout.marginX}mm`,
-                }}
+                style={{ width: `${layout.pageW}mm`, height: `${layout.pageH}mm` }}
               >
-                <div
-                  className="sheet-grid"
-                  style={{
-                    gridTemplateColumns: `repeat(${layout.cols}, ${options.card.w}mm)`,
-                    gap: `${layout.gap}mm`,
-                  }}
-                >
-                  {sheetTiles.map((tile, i) => (
-                    <Tile
-                      key={tile.id}
-                      tile={tile}
-                      url={naturals.get(tile.itemId)?.url}
-                      card={options.card}
-                      cutMarks={options.cutMarks}
-                      labels={options.labels}
-                      index={sheetIndex * layout.perSheet + i + 1}
-                    />
-                  ))}
+                <div className="sheet-inner" style={{ padding: `${layout.marginY}mm ${layout.marginX}mm` }}>
+                  <div
+                    className="sheet-grid"
+                    style={{
+                      gridTemplateColumns: `repeat(${layout.cols}, ${options.card.w}mm)`,
+                      gap: `${layout.gap}mm`,
+                    }}
+                  >
+                    {sheetTiles.map((tile, i) => (
+                      <Tile
+                        key={tile.id}
+                        tile={tile}
+                        url={naturals.get(tile.itemId)?.url}
+                        card={options.card}
+                        labels={options.labels}
+                        index={sheetIndex * layout.perSheet + i + 1}
+                      />
+                    ))}
+                  </div>
+                  <div className="sheet-foot" style={{ height: `${layout.footer}mm` }}>
+                    <span>
+                      {binder.name} · sheet {sheetIndex + 1} of {sheets.length} · {options.card.w} × {options.card.h} mm
+                    </span>
+                    <span className="ruler" aria-hidden>
+                      <i />
+                      <em>50 mm</em>
+                    </span>
+                  </div>
                 </div>
-                <div className="sheet-foot" style={{ height: `${layout.footer}mm` }}>
-                  <span>
-                    {binder.name} · sheet {sheetIndex + 1} of {sheets.length} · {options.card.w} × {options.card.h} mm
-                  </span>
-                  <span className="ruler" aria-hidden>
-                    <i />
-                    <em>50 mm</em>
-                  </span>
-                </div>
+                {options.cutLines && (
+                  <CutLayer layout={layout} options={options} tiles={sheetTiles.length} stroke={strokeMm} />
+                )}
               </div>
             ))}
             {!sheets.length && <p className="note">Nothing selected to print.</p>}

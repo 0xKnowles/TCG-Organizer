@@ -36,7 +36,7 @@ export interface PrintOptions {
   card: { w: number; h: number };
   /** Width of the divider between two pockets, measured on the real binder. */
   pocketGap: number;
-  cutMarks: boolean;
+  cutLines: boolean;
   labels: boolean;
 }
 
@@ -45,7 +45,7 @@ export const DEFAULT_PRINT_OPTIONS: PrintOptions = {
   landscape: false,
   card: { w: 63, h: 88 },
   pocketGap: 4,
-  cutMarks: true,
+  cutLines: true,
   labels: true,
 };
 
@@ -189,6 +189,50 @@ export function buildTiles(
     tiles.push(...tilesForPlacement(placement, item.id, item.name, item.image, natural, options));
   }
   return tiles;
+}
+
+/** How far a cut line runs past the block of tiles, in mm. */
+export const CUT_OVERHANG = 7;
+
+export interface CutLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/**
+ * Cut lines for one sheet, in mm. Every tile edge gets a line, and because the
+ * grid is regular a line only ever runs along tile edges — never across
+ * artwork — so you can lay a ruler on one line and cut a whole row in a pass.
+ * Lines run past the outermost tiles so they are easy to line up on, and they
+ * stop at the last tile a row or column actually holds.
+ */
+export function cutGuides(layout: SheetLayout, options: PrintOptions, tileCount: number): CutLine[] {
+  if (tileCount < 1) return [];
+  const { w: cardW, h: cardH } = options.card;
+  const rowsUsed = Math.min(layout.rows, Math.ceil(tileCount / layout.cols));
+  const lastRowCount = tileCount - (rowsUsed - 1) * layout.cols;
+  const colX = (c: number) => layout.marginX + c * (cardW + layout.gap);
+  const rowY = (r: number) => layout.marginY + r * (cardH + layout.gap);
+  const clampX = (v: number) => Math.max(2.5, Math.min(layout.pageW - 2.5, v));
+  const clampY = (v: number) => Math.max(2.5, Math.min(layout.pageH - 2.5, v));
+
+  const lines: CutLine[] = [];
+  for (let c = 0; c < layout.cols; c++) {
+    const rowsInColumn = c < lastRowCount ? rowsUsed : rowsUsed - 1;
+    if (rowsInColumn < 1) continue;
+    const y1 = clampY(rowY(0) - CUT_OVERHANG);
+    const y2 = clampY(rowY(rowsInColumn - 1) + cardH + CUT_OVERHANG);
+    for (const x of [colX(c), colX(c) + cardW]) lines.push({ x1: x, y1, x2: x, y2 });
+  }
+  for (let r = 0; r < rowsUsed; r++) {
+    const colsInRow = r === rowsUsed - 1 ? lastRowCount : layout.cols;
+    const x1 = clampX(colX(0) - CUT_OVERHANG);
+    const x2 = clampX(colX(colsInRow - 1) + cardW + CUT_OVERHANG);
+    for (const y of [rowY(r), rowY(r) + cardH]) lines.push({ x1, y1: y, x2, y2: y });
+  }
+  return lines;
 }
 
 export function chunk<T>(items: T[], size: number): T[][] {
