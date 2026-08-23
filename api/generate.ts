@@ -12,6 +12,12 @@ import Anthropic from '@anthropic-ai/sdk';
  * so this half goes to another provider; which one is an env var.
  */
 
+/**
+ * Image generation runs well past Vercel's 10s default. 60s is the Hobby
+ * ceiling; Pro allows more if a bigger model needs it.
+ */
+export const maxDuration = 60;
+
 interface Req {
   method?: string;
   body?: unknown;
@@ -129,33 +135,106 @@ function aspectRatio(aspect: number): string {
   return options.reduce((best, o) => (Math.abs(o[1] - aspect) < Math.abs(best[1] - aspect) ? o : best))[0];
 }
 
+interface GeminiResponse {
+  error?: { message?: string; status?: string };
+  promptFeedback?: { blockReason?: string; blockReasonMessage?: string };
+  candidates?: {
+    finishReason?: string;
+    content?: { parts?: { text?: string; inlineData?: { data?: string; mimeType?: string } }[] };
+  }[];
+}
+
+/** Something came back, but not an image — say why rather than "no image". */
+function geminiRefusal(body: GeminiResponse): string | null {
+  const blocked = body.promptFeedback?.blockReason;
+  if (blocked) return `The prompt was blocked (${body.promptFeedback?.blockReasonMessage ?? blocked}).`;
+  const candidate = body.candidates?.[0];
+  const finish = candidate?.finishReason;
+  if (finish && finish !== 'STOP') return `The image model stopped: ${finish}.`;
+  // It sometimes answers in words instead of pixels; that text is the reason.
+  const said = candidate?.content?.parts
+    ?.map((p) => p.text)
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return said ? `The image model replied with text instead of an image: ${said.slice(0, 300)}` : null;
+}
+
+/**
+ * The image model takes bytes, not links. Card art usually arrives as a URL, so
+ * fetch it here — the reference images are what make the style match, and
+ * dropping them would quietly cost most of the resemblance.
+ */
+async function inlineReference(ref: ImageRef): Promise<{ mime_type: string; data: string } | null> {
+  if (ref.type === 'base64') return { mime_type: ref.media_type, data: ref.data };
+  try {
+    const res = await fetch(ref.url);
+    if (!res.ok) return null;
+    const mime = res.headers.get('content-type') ?? 'image/png';
+    if (!mime.startsWith('image/')) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.byteLength > 4_000_000) return null;
+    return { mime_type: mime.split(';')[0], data: bytes.toString('base64') };
+  } catch {
+    return null; // a reference that will not load is not worth failing over
+  }
+}
+
 async function geminiImage(prompt: string, aspect: number, references: ImageRef[]) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('Set GEMINI_API_KEY to generate art.');
+
   const parts: unknown[] = [{ text: prompt }];
   for (const ref of references) {
-    if (ref.type === 'base64') parts.push({ inline_data: { mime_type: ref.media_type, data: ref.data } });
+    const inlined = await inlineReference(ref);
+    if (inlined) parts.push({ inline_data: inlined });
+  }
+  const ratio = aspectRatio(aspect);
+
+  // The image-generation request shape has moved around between Gemini image
+  // models, so try the plausible forms in turn rather than pin one and break.
+  const variants: Record<string, unknown>[] = [
+    { generationConfig: { imageConfig: { aspectRatio: ratio } } },
+    { generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: ratio } } },
+    { generationConfig: { responseModalities: ['IMAGE'] } },
+    {},
+  ];
+
+  let lastReason = '';
+  for (const extra of variants) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ parts }], ...extra }),
+    });
+    const body = (await res.json().catch(() => ({}))) as GeminiResponse;
+
+    if (!res.ok) {
+      const message = body.error?.message ?? `Image model failed (${res.status})`;
+      // A bad key or a missing model will not fix itself on the next shape.
+      if (res.status === 401 || res.status === 403 || /api key|permission|not found|quota|billing/i.test(message)) {
+        throw new Error(message);
+      }
+      lastReason = message;
+      continue;
+    }
+
+    const part = body.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+    if (part?.inlineData?.data) {
+      return {
+        image: `data:${part.inlineData.mimeType ?? 'image/png'};base64,${part.inlineData.data}`,
+        model: GEMINI_MODEL,
+      };
+    }
+
+    const refusal = geminiRefusal(body);
+    // A safety block or a spoken refusal is about the prompt, not the request
+    // shape — trying another shape would just repeat it.
+    if (refusal) throw new Error(refusal);
+    lastReason = 'the response carried no image';
   }
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: { imageConfig: { aspectRatio: aspectRatio(aspect) } },
-    }),
-  });
-  const body = (await res.json()) as {
-    error?: { message?: string };
-    candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string } }[] } }[];
-  };
-  if (!res.ok) throw new Error(body.error?.message ?? `Image model failed (${res.status})`);
-  const part = body.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
-  if (!part?.inlineData?.data) throw new Error('The image model returned no image.');
-  return {
-    image: `data:${part.inlineData.mimeType ?? 'image/png'};base64,${part.inlineData.data}`,
-    model: GEMINI_MODEL,
-  };
+  throw new Error(`The image model returned no image — ${lastReason || 'no reason given'}.`);
 }
 
 async function openaiImage(prompt: string, aspect: number) {
@@ -213,7 +292,14 @@ export default async function handler(req: Req, res: Res) {
   }
   try {
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json(await handleGenerate(req.body));
+    const result = await handleGenerate(req.body);
+    const image = (result as { image?: string }).image;
+    if (image && image.length > 4_000_000) {
+      throw new Error(
+        'The generated image is too large to pass back (over ~4 MB). Ask the model for a smaller size, or set GEMINI_IMAGE_MODEL to a model that returns 1K images.',
+      );
+    }
+    res.status(200).json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Generation failed';
     res.status(message.includes('Set ') ? 501 : 502).json({ error: message });

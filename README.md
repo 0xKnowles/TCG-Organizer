@@ -170,6 +170,24 @@ reaches the browser. `IMAGE_PROVIDER` picks between providers, and
 `GEMINI_IMAGE_MODEL` / `OPENAI_IMAGE_MODEL` override the model names if a
 provider renames one.
 
+**Notes for the Gemini path**, which is the default:
+
+- The default model is `gemini-2.5-flash-image` (Nano Banana). Point
+  `GEMINI_IMAGE_MODEL` at a larger image model if you want bigger output.
+- Rendering takes tens of seconds, so the function declares `maxDuration = 60`.
+  That is the ceiling on Vercel's Hobby plan; raise it on Pro if a bigger model
+  needs longer.
+- The reply comes back as base64 inside JSON, and a serverless response caps out
+  around 4.5 MB. A 1K image is comfortably inside that; a 4K one is not, and the
+  endpoint says so plainly instead of failing as a platform error.
+- Print resolution follows from the pixels: a 1024 px wide image across two
+  pockets (130 mm) lands near 200 dpi, which the print panel calls fair. For 300
+  dpi at that size you need roughly 1550 px, so use a model that returns 2K.
+- Reference images are fetched server-side and passed to the model as bytes, so
+  cards found through search count as references too, not just your uploads.
+- If the model declines — a safety block, or it answers in words instead of
+  pixels — that reason is shown rather than a bare "no image".
+
 The brief asks for **background art only** — no creatures, characters, text,
 logos or card frames, and nothing recognisable from an existing franchise. It
 takes the mood, palette and painting style of a page and makes something new to

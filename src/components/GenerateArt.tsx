@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LibraryItem, Placement } from '../types';
 import { useBinder } from '../store';
 import { placementsOnPage } from '../lib/geometry';
@@ -42,6 +42,7 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
   const [prompt, setPrompt] = useState('');
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<'brief' | 'image' | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -57,6 +58,17 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
   // A pair with facing openings prints as one uncut piece; worth saying.
   const pairs = facingPairs(openingsOn(binder, isLeftPage(binder, page)));
   const uncut = span.spanCols === 2 && span.spanRows === 1 && pairs.length > 0;
+
+  // Rendering takes tens of seconds; show that something is still happening.
+  useEffect(() => {
+    if (!busy) {
+      setElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   function toggle(id: string) {
     const next = new Set(chosen);
@@ -100,9 +112,10 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
         setPreview(image);
       }
     } catch (err) {
-      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Generation failed.');
+      const aborted = controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError');
+      if (!aborted) setError(err instanceof Error ? err.message : 'Generation failed.');
     } finally {
-      if (!controller.signal.aborted) setBusy(null);
+      setBusy(null);
     }
   }
 
@@ -186,8 +199,13 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
           disabled={!references.length || busy !== null}
           onClick={() => run('brief')}
         >
-          {busy === 'brief' ? 'Reading the page…' : 'Read the page'}
+          {busy === 'brief' ? `Reading the page… ${elapsed}s` : 'Read the page'}
         </button>
+        {busy && (
+          <button type="button" className="btn btn-sm" onClick={() => abortRef.current?.abort()}>
+            Cancel
+          </button>
+        )}
       </div>
 
       {brief && (
@@ -211,7 +229,7 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
               disabled={!prompt.trim() || busy !== null}
               onClick={() => run('image')}
             >
-              {busy === 'image' ? 'Generating…' : preview ? 'Generate again' : 'Generate art'}
+              {busy === 'image' ? `Generating… ${elapsed}s` : preview ? 'Generate again' : 'Generate art'}
             </button>
           </div>
         </>
