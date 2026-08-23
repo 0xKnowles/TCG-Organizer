@@ -182,6 +182,7 @@ function Workspace() {
             open
             heldItemId={heldItem?.id ?? null}
             allowDrag={canDrag}
+            currentPage={activePage}
             onHold={hold}
             onClose={() => undefined}
           />
@@ -244,6 +245,7 @@ function Workspace() {
             open={libraryOpen}
             heldItemId={heldItem?.id ?? null}
             allowDrag={canDrag}
+            currentPage={activePage}
             onHold={hold}
             onClose={() => setLibraryOpen(false)}
           />

@@ -12,6 +12,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

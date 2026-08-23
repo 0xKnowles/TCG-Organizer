@@ -6,9 +6,42 @@ import { searchCards, type SearchQuery } from './src/lib/cardSearch';
  * Serve the same /api/cards endpoint the deployed function provides, so the dev
  * server behaves like production instead of hitting card APIs from the page.
  */
+function readBody(req: Connect.IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => (raw += chunk));
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
 function cardApi(): Plugin {
   const handler: Connect.NextHandleFunction = (req, res, next) => {
     const url = new URL(req.url ?? '', 'http://localhost');
+    const send = (status: number, body: unknown) => {
+      res.statusCode = status;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(body));
+    };
+
+    if (url.pathname.startsWith('/api/generate')) {
+      // Loaded on demand so the Anthropic SDK stays out of config startup.
+      readBody(req)
+        .then(async (body) => {
+          const { handleGenerate } = await import('./api/generate');
+          return handleGenerate(body);
+        })
+        .then((result) => send(200, result))
+        .catch((err: unknown) => send(502, { error: err instanceof Error ? err.message : 'failed' }));
+      return;
+    }
+
     if (!url.pathname.startsWith('/api/cards')) return next();
 
     const names = url.searchParams.get('names');

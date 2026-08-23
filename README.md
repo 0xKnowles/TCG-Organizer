@@ -28,6 +28,9 @@ including fan art and photos that span two or more pockets.
   its front page alone on the right, which is also what decides whether a page is
   a left-hand or right-hand one — and so which of its pockets face each other.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
+- **Generated filler art.** Claude reads the cards on a page and writes an art
+  brief; an image model renders background art in that style, sized to the
+  pockets you picked.
 - **Print to size.** Sheets of tiles at true physical size — 63 × 88 mm by
   default — with dashed cut lines and a label telling you which pocket each piece
   goes in. Art that spans pockets is sliced into one piece per pocket.
@@ -136,6 +139,41 @@ headers again.
 Card images are loaded straight from each source's CDN. That is fine for
 display; PNG export additionally needs the image host to allow CORS, and any
 image whose host refuses is left as an empty pocket.
+
+## Generating filler art
+
+**Add → Generate** builds background art for the empty pockets on a page, in the
+style of the cards already sitting there.
+
+1. Pick the size: one pocket, two wide, or two tall. Two wide is worth
+   preferring — on a facing pair it prints as one uncut piece, and the panel
+   tells you which pockets those are on this page.
+2. Pick which cards it should read. Everything on the page is selected by
+   default; drop any that are off-theme.
+3. **Read the page.** Claude looks at the illustrations and writes a brief —
+   theme, palette, and a prompt. It is told to ignore everything the card frame
+   adds: borders, name plates, HP, energy and set symbols, rules text, holo
+   pattern. Only the illustration counts.
+4. Edit the prompt if you want, then **Generate art**. Keep it and it lands in
+   your library as art with the span you chose, ready to place and print.
+
+Two models, because they do different jobs:
+
+| Step                            | Model                                         | Why                                                                                                                   |
+| ------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Read the cards, write the brief | `claude-opus-5`                               | Reads several card images in one call and can be held to "illustration only, ignore the frame"                        |
+| Render the art                  | Gemini image model (default) or `gpt-image-1` | Claude has no image generation; Gemini can take the card art as reference images, which is what makes the style match |
+
+Set `ANTHROPIC_API_KEY` plus one of `GEMINI_API_KEY` / `OPENAI_API_KEY` (see
+`.env.example`). Both calls run in the `/api/generate` function, so no key
+reaches the browser. `IMAGE_PROVIDER` picks between providers, and
+`GEMINI_IMAGE_MODEL` / `OPENAI_IMAGE_MODEL` override the model names if a
+provider renames one.
+
+The brief asks for **background art only** — no creatures, characters, text,
+logos or card frames, and nothing recognisable from an existing franchise. It
+takes the mood, palette and painting style of a page and makes something new to
+sit beside it, which is what binder filler is for.
 
 ## Importing a collection
 

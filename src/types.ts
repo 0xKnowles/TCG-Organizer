@@ -2,7 +2,7 @@
 export type ImageSrc = { type: 'remote'; url: string } | { type: 'local'; key: string };
 
 /** Where an item came from, so printing can default to what you must print. */
-export type Origin = 'api' | 'upload' | 'link' | 'csv';
+export type Origin = 'api' | 'upload' | 'link' | 'csv' | 'generated';
 
 export interface CardItem {
   id: string;

@@ -7,6 +7,7 @@ import { putBlob } from '../lib/idb';
 import { normalizeImage, uid } from '../lib/util';
 import { startDrag, endDrag } from '../lib/dnd';
 import { useImageUrl } from '../lib/useImage';
+import GenerateArt from './GenerateArt';
 
 const API_KEY_STORAGE = 'binder-studio:pokemontcg-key';
 const SPANS = [
@@ -182,9 +183,9 @@ function CsvImport({ onDone }: { onDone: () => void }) {
 
 /* --------------------------------- add ---------------------------------- */
 
-type Source = 'search' | 'upload' | 'link' | 'csv';
+type Source = 'search' | 'upload' | 'link' | 'csv' | 'generate';
 
-function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean }) {
+function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: boolean; page: number }) {
   const { dispatch } = useBinder();
   const [source, setSource] = useState<Source>('search');
   const [asArt, setAsArt] = useState(false);
@@ -322,6 +323,9 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
           <button type="button" aria-pressed={source === 'csv'} onClick={() => setSource('csv')}>
             CSV
           </button>
+          <button type="button" aria-pressed={source === 'generate'} onClick={() => setSource('generate')}>
+            Generate
+          </button>
         </div>
       </div>
 
@@ -375,6 +379,8 @@ function AddView({ onDone, allowDrag }: { onDone: () => void; allowDrag: boolean
         )}
 
         {source === 'csv' && <CsvImport onDone={onDone} />}
+
+        {source === 'generate' && <GenerateArt page={page} onDone={onDone} />}
 
         {(source === 'upload' || source === 'link') && (
           <div className="insp-line">
@@ -461,12 +467,15 @@ export default function LibraryPanel({
   open,
   heldItemId,
   allowDrag,
+  currentPage,
   onHold,
   onClose,
 }: {
   open: boolean;
   heldItemId: string | null;
   allowDrag: boolean;
+  /** The page the generator reads its reference cards from. */
+  currentPage: number;
   onHold: (item: LibraryItem) => void;
   onClose: () => void;
 }) {
@@ -502,7 +511,7 @@ export default function LibraryPanel({
       </button>
 
       {adding ? (
-        <AddView onDone={() => setAdding(false)} allowDrag={allowDrag} />
+        <AddView onDone={() => setAdding(false)} allowDrag={allowDrag} page={currentPage} />
       ) : (
         <>
           <div className="library-head">

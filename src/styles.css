@@ -496,7 +496,12 @@ input.title-input:hover {
   color: var(--ink-3);
 }
 .page.blank .grid {
-  opacity: 0.4;
+  /* The cover side of the first spread: a place, not a page. */
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line-2);
+  box-shadow: none;
+  opacity: 0.55;
 }
 
 .grid {
@@ -655,6 +660,9 @@ input.title-input:hover {
 }
 .library-sub .sect {
   flex: 1 1 auto;
+}
+.library-sub .seg {
+  flex-wrap: wrap;
 }
 
 .items {
@@ -1448,4 +1456,73 @@ button.opening:hover {
   font-size: 11.5px;
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+/* ------------------------------ generate art ----------------------------- */
+.ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+.ref-card {
+  position: relative;
+  padding: 0;
+  aspect-ratio: 63 / 88;
+  overflow: hidden;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.45;
+}
+.ref-card[aria-pressed='true'] {
+  opacity: 1;
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.ref-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ref-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 3px;
+  font-size: 9px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.ref-check {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.swatches {
+  display: flex;
+  gap: 4px;
+}
+.swatches i {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--line-2);
+}
+.gen-preview {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.gen-preview img {
+  width: 100%;
+  object-fit: cover;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
 }
