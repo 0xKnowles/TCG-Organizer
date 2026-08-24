@@ -237,13 +237,33 @@ function ranked(cards: FoundCard[], query: SearchQuery): FoundCard[] {
 }
 
 /** Retry once on a 5xx: the pokemontcg.io failures come and go. */
+/**
+ * What actually went wrong, in a few words fit for the search panel. `fetch`
+ * reports a refused connection or a DNS failure as a bare "fetch failed" and
+ * hides the real reason on `cause`, which is the difference between a source
+ * being down and a source being unreachable from wherever this is running.
+ */
+function describe(err: unknown): string {
+  if (!(err instanceof Error)) return 'failed';
+  const cause = (err as { cause?: unknown }).cause;
+  const detail =
+    cause && typeof cause === 'object'
+      ? ((cause as { code?: string }).code ?? (cause as { message?: string }).message)
+      : undefined;
+  return detail ? `${err.message} (${detail})` : err.message;
+}
+
+/** Retry once on a server error or a failed connection: both are often momentary. */
+function worthRetrying(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /^5\d\d$/.test(err.message) || 'cause' in err;
+}
+
 async function withRetry(run: () => Promise<FoundCard[]>, ctx: SearchContext): Promise<FoundCard[]> {
   try {
     return await run();
   } catch (err) {
-    if (ctx.signal?.aborted) throw err;
-    const reason = err instanceof Error ? err.message : '';
-    if (!/^5\d\d$/.test(reason)) throw err;
+    if (ctx.signal?.aborted || !worthRetrying(err)) throw err;
     return run();
   }
 }
@@ -267,7 +287,7 @@ export async function searchCards(query: SearchQuery, ctx: SearchContext = {}): 
       if (kept.length) return { source, cards: ranked(kept, query).slice(0, query.limit ?? 36), failed };
     } catch (err) {
       if (ctx.signal?.aborted) throw err;
-      failed.push({ source, reason: err instanceof Error ? err.message : 'failed' });
+      failed.push({ source, reason: describe(err) });
     }
   }
 
