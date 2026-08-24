@@ -54,10 +54,16 @@ export default async function handler(req: Req, res: Res) {
     return;
   }
 
+  const apiKey = process.env.POKEMONTCG_API_KEY;
   try {
-    const result = await searchCards(query, { apiKey: process.env.POKEMONTCG_API_KEY });
+    const result = await searchCards(query, { apiKey });
+    // pokemontcg.io throttles hard without a key, and a rate-limited 5xx looks
+    // like any other outage. Say which it might be, so the fix is obvious.
+    if (!apiKey)
+      for (const failure of result.failed)
+        if (failure.source === 'pokemontcg') failure.reason = `${failure.reason}, no API key set`;
     // Same card searches repeat a lot; let the edge hold onto them.
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+    res.setHeader('Cache-Control', result.cards.length ? 's-maxage=3600, stale-while-revalidate=86400' : 'no-store');
     res.status(200).json(result);
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : 'Card search failed', cards: [] });

@@ -51,7 +51,17 @@ async function run(query: SearchQuery, opts: SearchOptions): Promise<SearchResul
         proxy = false;
       } else {
         proxy = true;
-        if (res.ok) return (await res.json()) as SearchResult;
+        if (res.ok) {
+          const result = (await res.json()) as SearchResult;
+          // Every source failed on the server's network. The browser is on a
+          // different one and both sources allow cross-origin requests, so ask
+          // them directly before reporting nothing found.
+          if (!result.cards.length && result.failed.length) {
+            const direct = await searchDirect(query, { apiKey: opts.apiKey, signal: opts.signal }).catch(() => null);
+            if (direct?.cards.length) return direct;
+          }
+          return result;
+        }
         // The endpoint is there and said no: report that rather than silently
         // going direct, which is what we are trying to avoid.
         const body = (await res.json().catch(() => ({}))) as { error?: string };
