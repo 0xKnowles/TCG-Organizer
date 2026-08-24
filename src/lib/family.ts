@@ -37,9 +37,20 @@ export function speciesSlug(name: string): string {
     .replace(/[^a-z0-9-]/g, '');
 }
 
+/** How long any one PokeAPI request gets before the lookup gives up. */
+const REQUEST_TIMEOUT = 6000;
+
+/** The caller's signal plus a deadline, so a quiet upstream cannot hang a lookup. */
+function deadline(ctx: FamilyContext): AbortSignal | undefined {
+  if (typeof AbortSignal.timeout !== 'function') return ctx.signal;
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT);
+  if (!ctx.signal) return timeout;
+  return typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.signal, timeout]) : ctx.signal;
+}
+
 async function getJson<T>(url: string, ctx: FamilyContext): Promise<T> {
   const doFetch = ctx.fetchImpl ?? fetch;
-  const res = await doFetch(url, { signal: ctx.signal });
+  const res = await doFetch(url, { signal: deadline(ctx) });
   if (!res.ok) throw new Error(String(res.status));
   return (await res.json()) as T;
 }

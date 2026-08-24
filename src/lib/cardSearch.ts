@@ -76,9 +76,24 @@ function quote(text: string): string {
   return text.replace(/["\\]/g, ' ').trim();
 }
 
+/** How long any one upstream request gets before the next source is tried. */
+const REQUEST_TIMEOUT = 6000;
+
+/**
+ * The caller's signal plus a deadline. A source that refuses a connection fails
+ * fast, but one that accepts and then goes quiet would otherwise hang the whole
+ * search — and on a serverless host, hang until the function is killed.
+ */
+function deadline(ctx: SearchContext): AbortSignal | undefined {
+  if (typeof AbortSignal.timeout !== 'function') return ctx.signal;
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT);
+  if (!ctx.signal) return timeout;
+  return typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.signal, timeout]) : ctx.signal;
+}
+
 async function getJson(url: string, ctx: SearchContext, headers?: Record<string, string>): Promise<unknown> {
   const doFetch = ctx.fetchImpl ?? fetch;
-  const res = await doFetch(url, { signal: ctx.signal, headers });
+  const res = await doFetch(url, { signal: deadline(ctx), headers });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
@@ -245,6 +260,7 @@ function ranked(cards: FoundCard[], query: SearchQuery): FoundCard[] {
  */
 function describe(err: unknown): string {
   if (!(err instanceof Error)) return 'failed';
+  if (err.name === 'TimeoutError') return 'timed out';
   const cause = (err as { cause?: unknown }).cause;
   const detail =
     cause && typeof cause === 'object'
@@ -253,10 +269,12 @@ function describe(err: unknown): string {
   return detail ? `${err.message} (${detail})` : err.message;
 }
 
-/** Retry once on a server error or a failed connection: both are often momentary. */
+/**
+ * Retry once on a server error. Not on a timeout or a refused connection: those
+ * have already cost the deadline, and the next source is the better bet.
+ */
 function worthRetrying(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  return /^5\d\d$/.test(err.message) || 'cause' in err;
+  return err instanceof Error && /^5\d\d$/.test(err.message);
 }
 
 async function withRetry(run: () => Promise<FoundCard[]>, ctx: SearchContext): Promise<FoundCard[]> {
