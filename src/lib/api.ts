@@ -1,4 +1,5 @@
 import type { CardItem } from '../types';
+import { resolveFamily } from './family';
 import { uid } from './util';
 import {
   searchCards as searchDirect,
@@ -38,6 +39,13 @@ async function run(query: SearchQuery, opts: SearchOptions): Promise<SearchResul
     }
     if (res) {
       const isJson = res.headers.get('content-type')?.includes('application/json');
+      if (!isJson && res.status >= 500) {
+        // The endpoint is there and the function crashed — Vercel answers with
+        // plain text. Go direct for this search, but ask again next time: this
+        // is not the same as there being no server, and treating it as such is
+        // what hid a broken function behind working searches.
+        return searchDirect(query, { apiKey: opts.apiKey, signal: opts.signal });
+      }
       if (!isJson || res.status === 404) {
         // A static host answers /api/cards with the app itself; stop asking.
         proxy = false;
@@ -94,13 +102,22 @@ export interface FamilyResult {
 
 /** Resolve one name to its whole evolution family. */
 export async function findFamily(query: string, signal?: AbortSignal): Promise<FamilyResult> {
-  const res = await fetch(`/api/family?q=${encodeURIComponent(query)}`, { signal });
-  const isJson = res.headers.get('content-type')?.includes('application/json');
-  if (!isJson) throw new Error('Family lookup needs the server side of this app — it is not available here.');
-  const body = (await res.json()) as FamilyResult & { error?: string };
-  if (!res.ok) throw new Error(body.error ?? `Family lookup failed (${res.status})`);
-  if (!body.members?.length) throw new Error('No evolution family found.');
-  return body;
+  let answered: (FamilyResult & { error?: string }) | undefined;
+  try {
+    const res = await fetch(`/api/family?q=${encodeURIComponent(query)}`, { signal });
+    if (res.headers.get('content-type')?.includes('application/json')) {
+      answered = (await res.json()) as FamilyResult & { error?: string };
+      if (!res.ok) throw new Error(answered.error ?? `Family lookup failed (${res.status})`);
+    }
+  } catch (err) {
+    // The endpoint answered and said no: that is the real answer, report it.
+    if (answered || signal?.aborted) throw err;
+  }
+  // No endpoint here, or it failed to reply. PokeAPI allows cross-origin
+  // requests, so the browser can ask it itself rather than giving up.
+  const family = answered ?? (await resolveFamily(query, { signal }));
+  if (!family.members?.length) throw new Error('No evolution family found.');
+  return family;
 }
 
 /**

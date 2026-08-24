@@ -7,3 +7,6 @@ tsconfig.tsbuildinfo
 .env
 .env.local
 .env.*.local
+
+# Vercel CLI build output
+.vercel

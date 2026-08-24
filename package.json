@@ -6,10 +6,11 @@
   "description": "Plan Pokemon TCG binder pages: pick a binder size, build a card library, and place cards and multi-slot fan art exactly where you want them.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/check-api-imports.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\"",
+    "check:api": "node scripts/check-api-imports.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

@@ -1,4 +1,4 @@
-import { resolveFamily } from '../src/lib/family';
+import { resolveFamily } from '../src/lib/family.js';
 
 /** Evolution family lookup, proxied so the page never depends on another host's CORS. */
 

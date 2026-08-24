@@ -1,4 +1,4 @@
-import { searchCards, type SearchQuery } from '../src/lib/cardSearch';
+import { searchCards, type SearchQuery } from '../src/lib/cardSearch.js';
 
 /**
  * Card search, proxied.
