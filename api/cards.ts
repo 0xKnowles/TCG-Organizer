@@ -1,6 +1,12 @@
 import { searchCards, type SearchQuery } from '../src/lib/cardSearch.js';
 
 /**
+ * Two sources, each with an 8-second budget, so the platform's 10-second
+ * default would cut the second one off before it had a chance to answer.
+ */
+export const maxDuration = 25;
+
+/**
  * Card search, proxied.
  *
  * Calling a card API straight from the page puts the browser at the mercy of

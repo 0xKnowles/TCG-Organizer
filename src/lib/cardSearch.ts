@@ -76,24 +76,27 @@ function quote(text: string): string {
   return text.replace(/["\\]/g, ' ').trim();
 }
 
-/** How long any one upstream request gets before the next source is tried. */
-const REQUEST_TIMEOUT = 6000;
-
 /**
- * The caller's signal plus a deadline. A source that refuses a connection fails
- * fast, but one that accepts and then goes quiet would otherwise hang the whole
- * search — and on a serverless host, hang until the function is killed.
+ * How long one source gets, in total, before the next is tried. The budget is
+ * shared by every request that source makes: a source that refuses a connection
+ * fails fast, but one that accepts and then goes quiet would otherwise hang the
+ * search — and a source that makes three such requests would hang it three
+ * times over, until the serverless host killed the function.
  */
-function deadline(ctx: SearchContext): AbortSignal | undefined {
-  if (typeof AbortSignal.timeout !== 'function') return ctx.signal;
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT);
-  if (!ctx.signal) return timeout;
-  return typeof AbortSignal.any === 'function' ? AbortSignal.any([ctx.signal, timeout]) : ctx.signal;
+const SOURCE_BUDGET = 8000;
+
+/** The caller's context with a deadline on it, for one source's attempt. */
+function budgeted(ctx: SearchContext): SearchContext {
+  if (typeof AbortSignal.timeout !== 'function') return ctx;
+  const timeout = AbortSignal.timeout(SOURCE_BUDGET);
+  if (!ctx.signal) return { ...ctx, signal: timeout };
+  if (typeof AbortSignal.any !== 'function') return ctx;
+  return { ...ctx, signal: AbortSignal.any([ctx.signal, timeout]) };
 }
 
 async function getJson(url: string, ctx: SearchContext, headers?: Record<string, string>): Promise<unknown> {
   const doFetch = ctx.fetchImpl ?? fetch;
-  const res = await doFetch(url, { signal: deadline(ctx), headers });
+  const res = await doFetch(url, { signal: ctx.signal, headers });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
@@ -206,12 +209,14 @@ async function tcgdexByName(name: string, ctx: SearchContext): Promise<TcgdexBri
 }
 
 async function fromTcgdex(query: SearchQuery, ctx: SearchContext): Promise<FoundCard[]> {
-  const sets = await tcgdexSetNames(ctx);
   const wanted = query.names?.length ? query.names : query.q ? [query.q] : [];
   if (!wanted.length) return [];
+  // Set names and card matches are independent lookups, and set names are only
+  // cosmetic — start the list now and collect it after, rather than spending
+  // part of this source's budget before the search has begun.
+  const pendingSets = tcgdexSetNames(ctx);
 
-  const seen = new Set<string>();
-  const cards: FoundCard[] = [];
+  const briefsFound: TcgdexBrief[] = [];
   for (const name of wanted) {
     const text = name.trim();
     if (!text) continue;
@@ -224,12 +229,17 @@ async function fromTcgdex(query: SearchQuery, ctx: SearchContext): Promise<Found
         /* no match by number either */
       }
     }
-    for (const brief of briefs) {
-      const card = tcgdexCard(brief, sets);
-      if (seen.has(card.id)) continue;
-      seen.add(card.id);
-      cards.push(card);
-    }
+    briefsFound.push(...briefs);
+  }
+
+  const sets = await pendingSets;
+  const seen = new Set<string>();
+  const cards: FoundCard[] = [];
+  for (const brief of briefsFound) {
+    const card = tcgdexCard(brief, sets);
+    if (seen.has(card.id)) continue;
+    seen.add(card.id);
+    cards.push(card);
   }
 
   const set = query.set?.trim().toLowerCase();
@@ -297,8 +307,9 @@ export async function searchCards(query: SearchQuery, ctx: SearchContext = {}): 
 
   for (const source of order) {
     try {
+      const attempt = budgeted(ctx);
       const cards = await withRetry(
-        () => (source === 'pokemontcg' ? fromPokemonTcg(query, ctx) : fromTcgdex(query, ctx)),
+        () => (source === 'pokemontcg' ? fromPokemonTcg(query, attempt) : fromTcgdex(query, attempt)),
         ctx,
       );
       const kept = query.species ? cards.filter((card) => isSpecies(card.name, query.species!)) : cards;

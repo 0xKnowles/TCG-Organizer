@@ -1,5 +1,8 @@
 import { resolveFamily } from '../src/lib/family.js';
 
+/** A chain lookup is a species request, the chain, then a name per member. */
+export const maxDuration = 25;
+
 /** Evolution family lookup, proxied so the page never depends on another host's CORS. */
 
 interface Req {
