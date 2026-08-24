@@ -18,6 +18,9 @@ including fan art and photos that span two or more pockets.
   2×2, up to a whole page — and it lays out across those pockets exactly as the
   binder will show it, dividers and all. Art can also run across the spine onto
   the facing page.
+- **Sets from an evolution line.** Name any Pokémon and the whole family's
+  English cards are added as cards you still need, in line order, ready to lay
+  out across pages.
 - **Card library from a CSV.** Import an export from Deckbox, TCGplayer, Collectr
   or a spreadsheet; the columns are detected for you and images are looked up by
   name, set and number.
@@ -205,10 +208,28 @@ by name, ready to place.
 A row with a quantity of `0`, or the whole file if you tick _this is a want
 list_, arrives marked as needed.
 
+## Building a set from an evolution line
+
+**Add → Line.** Type any member of a family — Applin, or Hydrapple, it makes no
+difference — and the whole line is resolved: Applin, Dipplin, Hydrapple,
+Flapple, Appletun. Drop any member you don't want, then **Add every card** pulls
+every English card printed for each one and adds them as cards you still need.
+
+They arrive in line order, oldest set first, so **Lay out from page N** fills
+pages in that order and adds pages when it runs out. From there it is an
+ordinary binder: drag to rearrange, mark the ones you own, and drop artwork into
+the gaps.
+
+Families come from [PokéAPI](https://pokeapi.co) — free, no key — through this
+app's `/api/family` endpoint. English names come from the species record, so
+Farfetch'd and Mr. Mime match the cards. Card names are matched on whole words,
+which is what stops a search for Mew returning the Mewtwo shelf.
+
 ## Cards you don't own yet
 
-Mark any item as **needed** in the library and every pocket holding it shows a
-ghost: the art at a quarter strength with a small tag. A master-set binder can
+Every library row has a **need** toggle. Turn it on and every pocket holding
+that card shows a ghost: the art at a quarter strength with a small tag. Turn it
+off when the card arrives and the pocket fills in. A master-set binder can
 then be laid out in full, holes and all. **Export want list** in the binder menu
 writes the needed cards to a CSV you can take shopping.
 

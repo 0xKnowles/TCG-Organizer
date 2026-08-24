@@ -22,6 +22,7 @@ function params(query: SearchQuery): string {
   if (query.q) search.set('q', query.q);
   if (query.set) search.set('set', query.set);
   if (query.names?.length) search.set('names', query.names.join('|'));
+  if (query.species) search.set('species', query.species);
   if (query.limit) search.set('limit', String(query.limit));
   return search.toString();
 }
@@ -84,6 +85,37 @@ export interface SearchOptions {
   apiKey?: string;
   setName?: string;
   signal?: AbortSignal;
+}
+
+export interface FamilyResult {
+  query: string;
+  members: { name: string; slug: string; stage: number }[];
+}
+
+/** Resolve one name to its whole evolution family. */
+export async function findFamily(query: string, signal?: AbortSignal): Promise<FamilyResult> {
+  const res = await fetch(`/api/family?q=${encodeURIComponent(query)}`, { signal });
+  const isJson = res.headers.get('content-type')?.includes('application/json');
+  if (!isJson) throw new Error('Family lookup needs the server side of this app — it is not available here.');
+  const body = (await res.json()) as FamilyResult & { error?: string };
+  if (!res.ok) throw new Error(body.error ?? `Family lookup failed (${res.status})`);
+  if (!body.members?.length) throw new Error('No evolution family found.');
+  return body;
+}
+
+/**
+ * Every card printed for one species, oldest set first. The species filter is
+ * what stops a search for Mew returning the Mewtwo shelf.
+ */
+export async function searchSpecies(species: string, opts: SearchOptions = {}): Promise<CardItem[]> {
+  const result = await run({ q: species, species, limit: 250 }, opts);
+  const cards = [...result.cards].sort(
+    (a, b) =>
+      (a.releaseDate ?? '').localeCompare(b.releaseDate ?? '') ||
+      (a.setName ?? '').localeCompare(b.setName ?? '') ||
+      String(a.number ?? '').localeCompare(String(b.number ?? ''), undefined, { numeric: true }),
+  );
+  return cards.map(toCardItem);
 }
 
 export interface SearchOutcome {

@@ -15,6 +15,8 @@ export interface FoundCard {
   setName?: string;
   number?: string;
   image?: string;
+  /** ISO date of the set, so a species run can be ordered oldest first. */
+  releaseDate?: string;
 }
 
 export interface SearchQuery {
@@ -23,6 +25,11 @@ export interface SearchQuery {
   set?: string;
   /** Several names at once, for a CSV import. */
   names?: string[];
+  /**
+   * Keep only cards whose name contains this species as whole words. A prefix
+   * search for Mew otherwise drags in every Mewtwo.
+   */
+  species?: string;
   limit?: number;
 }
 
@@ -47,6 +54,24 @@ export function looksLikeNumber(text: string): boolean {
   return /^[a-z]{0,4}\s?\d{1,4}[a-z]?(\/\d+)?$/i.test(text.trim());
 }
 
+/** Words, lowercased, punctuation dropped: "Farfetch'd V" -> ["farfetch","d","v"]. */
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+}
+
+/** True when `name` contains every word of `species` in order, as whole words. */
+export function isSpecies(name: string, species: string): boolean {
+  const want = words(species);
+  if (!want.length) return true;
+  const got = words(name);
+  return got.some((_, i) => want.every((word, j) => got[i + j] === word));
+}
+
 function quote(text: string): string {
   return text.replace(/["\\]/g, ' ').trim();
 }
@@ -64,7 +89,7 @@ interface PokemonTcgCard {
   id?: string;
   name?: string;
   number?: string;
-  set?: { name?: string };
+  set?: { name?: string; releaseDate?: string };
   images?: { small?: string; large?: string };
 }
 
@@ -98,6 +123,7 @@ async function fromPokemonTcg(query: SearchQuery, ctx: SearchContext): Promise<F
       setName: c.set?.name,
       number: c.number,
       image: c.images?.large ?? c.images?.small,
+      releaseDate: c.set?.releaseDate,
     }));
 }
 
@@ -110,14 +136,15 @@ interface TcgdexBrief {
   image?: string;
 }
 
-let setNames: Map<string, string> | null = null;
+let setNames: Map<string, { name: string; releaseDate?: string }> | null = null;
 
-async function tcgdexSetNames(ctx: SearchContext): Promise<Map<string, string>> {
+async function tcgdexSetNames(ctx: SearchContext): Promise<Map<string, { name: string; releaseDate?: string }>> {
   if (setNames) return setNames;
-  const names = new Map<string, string>();
+  const names = new Map<string, { name: string; releaseDate?: string }>();
   try {
-    const sets = (await getJson(`${TCGDEX}/sets`, ctx)) as { id?: string; name?: string }[];
-    for (const set of sets ?? []) if (set?.id && set.name) names.set(set.id, set.name);
+    const sets = (await getJson(`${TCGDEX}/sets`, ctx)) as { id?: string; name?: string; releaseDate?: string }[];
+    for (const set of sets ?? [])
+      if (set?.id && set.name) names.set(set.id, { name: set.name, releaseDate: set.releaseDate });
     // Only remember a list we actually got; set names are cosmetic, so a failed
     // fetch should be retried next time rather than cached as "no names".
     setNames = names;
@@ -127,13 +154,15 @@ async function tcgdexSetNames(ctx: SearchContext): Promise<Map<string, string>> 
   return names;
 }
 
-function tcgdexCard(brief: TcgdexBrief, sets: Map<string, string>): FoundCard {
+function tcgdexCard(brief: TcgdexBrief, sets: Map<string, { name: string; releaseDate?: string }>): FoundCard {
   const setId = brief.id?.includes('-') ? brief.id.slice(0, brief.id.lastIndexOf('-')) : undefined;
+  const set = setId ? sets.get(setId) : undefined;
   return {
     id: brief.id ?? `${brief.name}-${brief.localId ?? ''}`,
     name: brief.name ?? 'Card',
-    setName: setId ? (sets.get(setId) ?? setId) : undefined,
+    setName: set?.name ?? setId,
     number: brief.localId,
+    releaseDate: set?.releaseDate,
     // TCGdex serves an extension-less base URL; quality and format are appended.
     image: brief.image ? `${brief.image}/high.png` : undefined,
   };
@@ -234,7 +263,8 @@ export async function searchCards(query: SearchQuery, ctx: SearchContext = {}): 
         () => (source === 'pokemontcg' ? fromPokemonTcg(query, ctx) : fromTcgdex(query, ctx)),
         ctx,
       );
-      if (cards.length) return { source, cards: ranked(cards, query).slice(0, query.limit ?? 36), failed };
+      const kept = query.species ? cards.filter((card) => isSpecies(card.name, query.species!)) : cards;
+      if (kept.length) return { source, cards: ranked(kept, query).slice(0, query.limit ?? 36), failed };
     } catch (err) {
       if (ctx.signal?.aborted) throw err;
       failed.push({ source, reason: err instanceof Error ? err.message : 'failed' });

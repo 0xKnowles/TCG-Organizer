@@ -8,6 +8,7 @@ import { normalizeImage, uid } from '../lib/util';
 import { startDrag, endDrag } from '../lib/dnd';
 import { useImageUrl } from '../lib/useImage';
 import GenerateArt from './GenerateArt';
+import FamilyBuilder from './FamilyBuilder';
 
 const API_KEY_STORAGE = 'binder-studio:pokemontcg-key';
 const SPANS = [
@@ -183,7 +184,7 @@ function CsvImport({ onDone }: { onDone: () => void }) {
 
 /* --------------------------------- add ---------------------------------- */
 
-type Source = 'search' | 'upload' | 'link' | 'csv' | 'generate';
+type Source = 'search' | 'family' | 'upload' | 'link' | 'csv' | 'generate';
 
 function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: boolean; page: number }) {
   const { dispatch } = useBinder();
@@ -314,6 +315,9 @@ function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: b
           <button type="button" aria-pressed={source === 'search'} onClick={() => setSource('search')}>
             Search
           </button>
+          <button type="button" aria-pressed={source === 'family'} onClick={() => setSource('family')}>
+            Line
+          </button>
           <button type="button" aria-pressed={source === 'upload'} onClick={() => setSource('upload')}>
             Upload
           </button>
@@ -377,6 +381,8 @@ function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: b
             </p>
           </>
         )}
+
+        {source === 'family' && <FamilyBuilder page={page} onDone={onDone} />}
 
         {source === 'csv' && <CsvImport onDone={onDone} />}
 
@@ -565,6 +571,20 @@ export default function LibraryPanel({
                       <span>{subtitle(item)}</span>
                     </span>
                     <span className="item-tag">{count > 0 ? `×${count}` : ''}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="item-flag"
+                    aria-pressed={item.owned === false}
+                    aria-label={
+                      item.owned === false ? `Mark ${item.name} as owned` : `Mark ${item.name} as still needed`
+                    }
+                    title={item.owned === false ? 'You still need this — click when you get it' : 'Mark as needed'}
+                    onClick={() =>
+                      dispatch({ type: 'updateItem', id: item.id, patch: { owned: item.owned === false } })
+                    }
+                  >
+                    need
                   </button>
                   <button
                     type="button"

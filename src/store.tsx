@@ -42,7 +42,8 @@ export type Action =
   | { type: 'updatePlacement'; id: string; patch: Partial<Placement> }
   | { type: 'removePlacement'; id: string }
   | { type: 'clearPage'; page: number }
-  | { type: 'autoFill'; page: number };
+  | { type: 'autoFill'; page: number }
+  | { type: 'autoFillFrom'; page: number };
 
 /** Keep the opening pattern the same length as the row when the grid changes. */
 function resizeOpenings(binder: Binder, cols: number): Binder['pocketOpenings'] {
@@ -195,6 +196,25 @@ export function reducer(state: Binder, action: Action): Binder {
         const spot = firstFreeSlot(next, action.page);
         if (!spot) break;
         next = reducer(next, { type: 'place', itemId: item.id, page: action.page, col: spot.col, row: spot.row });
+      }
+      return next;
+    }
+
+    case 'autoFillFrom': {
+      // Lay every unplaced card out in library order from this page onward,
+      // adding pages when the binder runs out.
+      const placed = new Set(state.placements.map((p) => p.itemId));
+      const queue = state.library.filter((i) => i.kind === 'card' && !placed.has(i.id));
+      let next = state;
+      let page = action.page;
+      for (const item of queue) {
+        let spot = firstFreeSlot(next, page);
+        while (!spot) {
+          page += 1;
+          if (page >= next.pageCount) next = reducer(next, { type: 'addPage' });
+          spot = firstFreeSlot(next, page);
+        }
+        next = reducer(next, { type: 'place', itemId: item.id, page, col: spot.col, row: spot.row });
       }
       return next;
     }

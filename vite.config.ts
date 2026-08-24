@@ -30,6 +30,14 @@ function cardApi(): Plugin {
       res.end(JSON.stringify(body));
     };
 
+    if (url.pathname.startsWith('/api/family')) {
+      import('./src/lib/family')
+        .then(({ resolveFamily }) => resolveFamily(url.searchParams.get('q') ?? ''))
+        .then((family) => send(200, family))
+        .catch((err: unknown) => send(502, { error: err instanceof Error ? err.message : 'failed' }));
+      return;
+    }
+
     if (url.pathname.startsWith('/api/generate')) {
       // Loaded on demand so the Anthropic SDK stays out of config startup.
       readBody(req)
@@ -50,6 +58,7 @@ function cardApi(): Plugin {
       q: url.searchParams.get('q') ?? undefined,
       set: url.searchParams.get('set') ?? undefined,
       names: names ? names.split('|').filter(Boolean) : undefined,
+      species: url.searchParams.get('species') ?? undefined,
       limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
     };
 

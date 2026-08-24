@@ -39,6 +39,7 @@ export default async function handler(req: Req, res: Res) {
     q: first(params.q as string | string[] | undefined),
     set: first(params.set as string | string[] | undefined),
     names: names ? names.split('|').filter(Boolean) : undefined,
+    species: first(params.species as string | string[] | undefined),
     limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : undefined,
   };
 
