@@ -1,15 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk';
-
 /**
- * Binder filler art, in two steps.
+ * Binder filler art, in two steps, both on Gemini.
  *
- * `brief` — Claude looks at the cards on a page and writes an art brief. The
- * instruction that matters is that it describes the *illustration* and ignores
- * everything the card frame adds: borders, text boxes, HP, energy and set
- * symbols, holo pattern, name plates.
+ * `brief` — a vision model looks at the cards on a page and writes an art
+ * brief. The instruction that matters is that it describes the *illustration*
+ * and ignores everything the card frame adds: borders, text boxes, HP, energy
+ * and set symbols, holo pattern, name plates.
  *
- * `image` — an image model renders that brief. Claude has no image generation,
- * so this half goes to another provider; which one is an env var.
+ * `image` — an image model renders that brief, with the same card art passed
+ * back as reference images.
+ *
+ * Keeping them apart is what makes the brief editable before anything is
+ * rendered, so a wrong theme costs nothing to fix.
  */
 
 /**
@@ -51,14 +52,6 @@ Rules for that prompt:
 Reply with JSON only, no prose around it:
 {"theme": "one or two sentences on what the page has in common", "palette": ["#rrggbb", "..."], "prompt": "the image prompt"}`;
 
-function textOf(message: Anthropic.Message): string {
-  return message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n')
-    .trim();
-}
-
 function parseBrief(raw: string) {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
@@ -77,52 +70,66 @@ function parseBrief(raw: string) {
 }
 
 async function brief(references: ImageRef[], aspect: number, hint: string) {
-  const client = new Anthropic();
   const shape = aspect > 1.2 ? 'wide landscape' : aspect < 0.85 ? 'tall portrait' : 'square';
-  const images: Anthropic.ImageBlockParam[] = references
-    .slice(0, MAX_REFERENCES)
-    .map((ref) =>
-      ref.type === 'url'
-        ? { type: 'image', source: { type: 'url', url: ref.url } }
-        : { type: 'image', source: { type: 'base64', media_type: ref.media_type as 'image/jpeg', data: ref.data } },
-    );
 
-  const message = await client.messages.create({
-    model: 'claude-opus-5',
-    max_tokens: 8000,
-    thinking: { type: 'adaptive' },
-    system: BRIEF_SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          ...images,
-          {
-            type: 'text',
-            text: [
-              `These ${images.length} card${images.length === 1 ? '' : 's'} share a binder page.`,
-              `The art will be printed in a ${shape} space (aspect ratio ${aspect.toFixed(2)}).`,
-              hint.trim() ? `The collector adds: ${hint.trim()}` : '',
-              'Write the brief.',
-            ]
-              .filter(Boolean)
-              .join(' '),
-          },
-        ],
-      },
-    ],
+  // The model reads bytes, not links, and card art usually arrives as a URL.
+  const parts: unknown[] = [];
+  for (const ref of references.slice(0, MAX_REFERENCES)) {
+    const inlined = await inlineReference(ref);
+    if (inlined) parts.push({ inline_data: inlined });
+  }
+  if (!parts.length) throw new Error('None of the chosen card images could be loaded.');
+
+  const count = parts.length;
+  parts.push({
+    text: [
+      `These ${count} card${count === 1 ? '' : 's'} share a binder page.`,
+      `The art will be printed in a ${shape} space (aspect ratio ${aspect.toFixed(2)}).`,
+      hint.trim() ? `The collector adds: ${hint.trim()}` : '',
+      'Write the brief.',
+    ]
+      .filter(Boolean)
+      .join(' '),
   });
 
-  if (message.stop_reason === 'refusal') {
-    throw new Error('The model declined to describe these images.');
-  }
-  return parseBrief(textOf(message));
+  const { ok, status, body } = await callGemini(GEMINI_TEXT_MODEL, {
+    systemInstruction: { parts: [{ text: BRIEF_SYSTEM }] },
+    contents: [{ role: 'user', parts }],
+    // Asking for JSON directly beats hoping the prose happens to parse.
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+  if (!ok) throw new Error(body.error?.message ?? `Reading the cards failed (${status}).`);
+
+  const blocked = geminiBlocked(body);
+  if (blocked) throw new Error(blocked);
+  return parseBrief(geminiText(body));
 }
 
 /* ------------------------------ image models ----------------------------- */
 
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL ?? 'gemini-2.5-flash';
 const GEMINI_MODEL = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image';
-const OPENAI_MODEL = process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1';
+
+/**
+ * One generateContent call. The status comes back with the body rather than as
+ * an exception, because the image half tries several request shapes and needs
+ * to tell "that shape is wrong" from "this key is not going to work".
+ */
+async function callGemini(model: string, body: Record<string, unknown>) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('Set GEMINI_API_KEY to generate art.');
+  const res = await fetch(`${GEMINI_API}/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify(body),
+  });
+  return {
+    ok: res.ok,
+    status: res.status,
+    body: (await res.json().catch(() => ({}))) as GeminiResponse,
+  };
+}
 
 function aspectRatio(aspect: number): string {
   const options: [string, number][] = [
@@ -144,19 +151,29 @@ interface GeminiResponse {
   }[];
 }
 
-/** Something came back, but not an image — say why rather than "no image". */
-function geminiRefusal(body: GeminiResponse): string | null {
+/** A blocked prompt or a generation that stopped early, in words. */
+function geminiBlocked(body: GeminiResponse): string | null {
   const blocked = body.promptFeedback?.blockReason;
   if (blocked) return `The prompt was blocked (${body.promptFeedback?.blockReasonMessage ?? blocked}).`;
-  const candidate = body.candidates?.[0];
-  const finish = candidate?.finishReason;
-  if (finish && finish !== 'STOP') return `The image model stopped: ${finish}.`;
-  // It sometimes answers in words instead of pixels; that text is the reason.
-  const said = candidate?.content?.parts
-    ?.map((p) => p.text)
+  const finish = body.candidates?.[0]?.finishReason;
+  if (finish && finish !== 'STOP') return `The model stopped: ${finish}.`;
+  return null;
+}
+
+function geminiText(body: GeminiResponse): string {
+  return (body.candidates?.[0]?.content?.parts ?? [])
+    .map((part) => part.text)
     .filter(Boolean)
-    .join(' ')
+    .join('\n')
     .trim();
+}
+
+/** Something came back, but not an image — say why rather than "no image". */
+function geminiRefusal(body: GeminiResponse): string | null {
+  const blocked = geminiBlocked(body);
+  if (blocked) return blocked;
+  // It sometimes answers in words instead of pixels; that text is the reason.
+  const said = geminiText(body);
   return said ? `The image model replied with text instead of an image: ${said.slice(0, 300)}` : null;
 }
 
@@ -181,9 +198,6 @@ async function inlineReference(ref: ImageRef): Promise<{ mime_type: string; data
 }
 
 async function geminiImage(prompt: string, aspect: number, references: ImageRef[]) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('Set GEMINI_API_KEY to generate art.');
-
   const parts: unknown[] = [{ text: prompt }];
   for (const ref of references) {
     const inlined = await inlineReference(ref);
@@ -202,17 +216,12 @@ async function geminiImage(prompt: string, aspect: number, references: ImageRef[
 
   let lastReason = '';
   for (const extra of variants) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ parts }], ...extra }),
-    });
-    const body = (await res.json().catch(() => ({}))) as GeminiResponse;
+    const { ok, status, body } = await callGemini(GEMINI_MODEL, { contents: [{ parts }], ...extra });
 
-    if (!res.ok) {
-      const message = body.error?.message ?? `Image model failed (${res.status})`;
+    if (!ok) {
+      const message = body.error?.message ?? `Image model failed (${status})`;
       // A bad key or a missing model will not fix itself on the next shape.
-      if (res.status === 401 || res.status === 403 || /api key|permission|not found|quota|billing/i.test(message)) {
+      if (status === 401 || status === 403 || /api key|permission|not found|quota|billing/i.test(message)) {
         throw new Error(message);
       }
       lastReason = message;
@@ -237,30 +246,6 @@ async function geminiImage(prompt: string, aspect: number, references: ImageRef[
   throw new Error(`The image model returned no image — ${lastReason || 'no reason given'}.`);
 }
 
-async function openaiImage(prompt: string, aspect: number) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('Set OPENAI_API_KEY to generate art.');
-  const size = aspect > 1.2 ? '1536x1024' : aspect < 0.85 ? '1024x1536' : '1024x1024';
-  const res = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: OPENAI_MODEL, prompt, size, n: 1 }),
-  });
-  const body = (await res.json()) as { error?: { message?: string }; data?: { b64_json?: string; url?: string }[] };
-  if (!res.ok) throw new Error(body.error?.message ?? `Image model failed (${res.status})`);
-  const first = body.data?.[0];
-  if (first?.b64_json) return { image: `data:image/png;base64,${first.b64_json}`, model: OPENAI_MODEL };
-  if (first?.url) return { image: first.url, model: OPENAI_MODEL };
-  throw new Error('The image model returned no image.');
-}
-
-function renderImage(prompt: string, aspect: number, references: ImageRef[]) {
-  const provider = (
-    process.env.IMAGE_PROVIDER ?? (process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY ? 'openai' : 'gemini')
-  ).toLowerCase();
-  return provider === 'openai' ? openaiImage(prompt, aspect) : geminiImage(prompt, aspect, references);
-}
-
 /* -------------------------------- handler -------------------------------- */
 
 export async function handleGenerate(payload: unknown) {
@@ -280,7 +265,7 @@ export async function handleGenerate(payload: unknown) {
   }
   if (body.action === 'image') {
     if (!body.prompt?.trim()) throw new Error('Write a prompt first.');
-    return renderImage(body.prompt.trim(), aspect, references);
+    return geminiImage(body.prompt.trim(), aspect, references);
   }
   throw new Error('Unknown action.');
 }

@@ -251,7 +251,7 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
 
       {error && <p className="warn">{error}</p>}
       <p className="note fineprint">
-        Claude reads the card illustrations and ignores the frames; an image model renders the background. It makes new
+        Gemini reads the card illustrations and ignores the frames, then renders the background. It makes new
         background art in a matching style — never a copy of a card or its characters.
       </p>
     </>

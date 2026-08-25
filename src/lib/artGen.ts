@@ -2,12 +2,12 @@ import type { Binder, Placement } from '../types';
 import { physical } from './pockets';
 
 /**
- * Generating binder filler art happens in two steps: Claude reads the cards on
- * the page and writes an art brief, then an image model renders it. Splitting
- * them means the brief can be edited before anything is rendered.
+ * Generating binder filler art happens in two steps: a vision model reads the
+ * cards on the page and writes an art brief, then an image model renders it.
+ * Splitting them means the brief can be edited before anything is rendered.
  */
 
-/** An image source in the shape the Messages API takes, so it passes straight through. */
+/** A card image, either left as a link or carried as bytes for an upload. */
 export type ImageRef = { type: 'url'; url: string } | { type: 'base64'; media_type: string; data: string };
 
 export interface ArtBrief {

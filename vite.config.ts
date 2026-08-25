@@ -39,7 +39,7 @@ function cardApi(): Plugin {
     }
 
     if (url.pathname.startsWith('/api/generate')) {
-      // Loaded on demand so the Anthropic SDK stays out of config startup.
+      // Loaded on demand so the handler stays out of config startup.
       readBody(req)
         .then(async (body) => {
           const { handleGenerate } = await import('./api/generate');
