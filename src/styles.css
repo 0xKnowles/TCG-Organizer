@@ -1145,6 +1145,14 @@ input.title-input:hover {
 .opt .seg {
   max-width: 100%;
 }
+/* justify-items: start leaves a textarea at its default cols width. */
+.opt > textarea,
+.opt > select,
+.opt > .field,
+.opt > .ref-grid,
+.opt > .chips {
+  width: 100%;
+}
 .field.inline {
   display: flex;
   align-items: center;
@@ -1525,4 +1533,67 @@ button.opening:hover {
   border-radius: var(--r);
   border: 1px solid var(--line-2);
   background: var(--panel-2);
+}
+
+/* --------------------------- poster studio ------------------------------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 13px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* The sheet is drawn at true physical size, like a print sheet. */
+.poster-sheet {
+  position: relative;
+  overflow: hidden;
+}
+.poster-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.poster-blank {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(45deg, #f4f4f2 0 8mm, #ececea 8mm 16mm);
+}
+.poster-guides span {
+  position: absolute;
+  border: 0.4mm dashed rgba(20, 20, 20, 0.75);
+  box-shadow: 0 0 0 0.4mm rgba(255, 255, 255, 0.6);
+  border-radius: 1mm;
+}
+
+@media print {
+  /* Guides are a setting-up aid; they only reach paper when asked for. */
+  .poster-guides:not(.print) {
+    display: none;
+  }
+  .poster-art,
+  .poster-guides span {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

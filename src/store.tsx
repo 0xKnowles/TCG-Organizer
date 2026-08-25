@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { ArtItem, Binder, CardItem, LibraryItem, Placement } from './types';
+import type { ArtItem, Binder, CardItem, LibraryItem, Placement, Poster } from './types';
 import { canDrop, firstFreeSlot, inBounds, occupantsOf, rectOf } from './lib/geometry';
 import { defaultOpenings, physical } from './lib/pockets';
 import { allKeys, deleteBlob } from './lib/idb';
@@ -43,7 +43,9 @@ export type Action =
   | { type: 'removePlacement'; id: string }
   | { type: 'clearPage'; page: number }
   | { type: 'autoFill'; page: number }
-  | { type: 'autoFillFrom'; page: number };
+  | { type: 'autoFillFrom'; page: number }
+  | { type: 'savePoster'; poster: Poster }
+  | { type: 'removePoster'; id: string };
 
 /** Keep the opening pattern the same length as the row when the grid changes. */
 function resizeOpenings(binder: Binder, cols: number): Binder['pocketOpenings'] {
@@ -100,6 +102,19 @@ export function reducer(state: Binder, action: Action): Binder {
       const library = state.library.map((i) => (i.id === action.id ? ({ ...i, ...action.patch } as LibraryItem) : i));
       return touch({ ...state, library });
     }
+
+    case 'savePoster': {
+      const posters = state.posters ?? [];
+      const at = posters.findIndex((p) => p.id === action.poster.id);
+      const poster = { ...action.poster, updatedAt: Date.now() };
+      return touch({
+        ...state,
+        posters: at < 0 ? [...posters, poster] : posters.map((p, i) => (i === at ? poster : p)),
+      });
+    }
+
+    case 'removePoster':
+      return touch({ ...state, posters: (state.posters ?? []).filter((p) => p.id !== action.id) });
 
     case 'removeItem':
       return touch({
@@ -278,9 +293,10 @@ export function BinderProvider({ children }: { children: React.ReactNode }) {
     if (!binder) return;
     const timer = setTimeout(async () => {
       try {
+        // Posters hold blobs too, and they are not in the library — leaving them
+        // out here would collect a poster's art twenty seconds after making it.
         const referenced = new Set(
-          binder.library
-            .map((i) => i.image)
+          [...binder.library.map((i) => i.image), ...(binder.posters ?? []).map((p) => p.image)]
             .filter((img): img is { type: 'local'; key: string } => !!img && img.type === 'local')
             .map((img) => img.key),
         );
@@ -292,7 +308,7 @@ export function BinderProvider({ children }: { children: React.ReactNode }) {
       }
     }, 20000);
     return () => clearTimeout(timer);
-  }, [binder?.library]);
+  }, [binder?.library, binder?.posters]);
 
   const value = useMemo<Ctx>(
     () => ({ binder, dispatch, createBinder, loadBinder, closeBinder }),

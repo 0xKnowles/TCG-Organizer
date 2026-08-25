@@ -52,6 +52,27 @@ Rules for that prompt:
 Reply with JSON only, no prose around it:
 {"theme": "one or two sentences on what the page has in common", "palette": ["#rrggbb", "..."], "prompt": "the image prompt"}`;
 
+const POSTER_SYSTEM = `You write art briefs for a card display poster: a photo print that a collector mounts real trading cards on top of, so the poster carries the world of the card outward to the edges of the paper.
+
+You will be shown photographs or scans of the cards that will be mounted. Read ONLY the illustration on each card. Ignore everything the card frame adds — borders, name plates, HP, energy and type symbols, attack and rules text, set and rarity symbols, holo or texture patterns, and any stamped logos. Those are printing furniture, not the art.
+
+From the illustrations, work out the place the art belongs to: setting, time of day, weather, palette, light, depth, and how it is rendered (brush, airbrush, cel, digital painting, watercolour).
+
+Then write a prompt for an image model that will produce that same place seen WIDER — the scene the card is a window into, filling a whole sheet of paper.
+
+Rules for that prompt:
+- One continuous scene, edge to edge. No border, frame, mat, vignette, drop shadow or card shape drawn into the art.
+- Setting only. No creatures, characters, mascots, people or named beings of any kind — the mounted card supplies the character.
+- No text, letters, numerals, logos, watermarks or signatures.
+- Nothing recognisable from an existing franchise. Take the mood, palette, light and painting style — never a specific character or emblem.
+- The cards are mounted over the area named below. Keep that area quiet — open sky, still water, mist, plain ground, a soft gradient — with no focal detail, so nothing worth seeing ends up hidden behind a card.
+- Compose the interest around that area and let it lead the eye there: horizon, light source, foliage, architecture, depth.
+- Say the composition should hold together with nothing important in the outermost few percent, since the sheet is trimmed and framed by hand.
+- Name the palette, the light, the depth and the rendering style plainly. Keep it under 150 words.
+
+Reply with JSON only, no prose around it:
+{"theme": "one or two sentences on the world these cards belong to", "palette": ["#rrggbb", "..."], "prompt": "the image prompt"}`;
+
 function parseBrief(raw: string) {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
@@ -69,7 +90,27 @@ function parseBrief(raw: string) {
   };
 }
 
-async function brief(references: ImageRef[], aspect: number, hint: string) {
+/** Where the cards will sit, in the words the model is asked to compose around. */
+interface Windows {
+  cols: number;
+  rows: number;
+  xPct: number;
+  yPct: number;
+  wPct: number;
+  hPct: number;
+}
+
+function windowSentence(windows: Windows): string {
+  const count = windows.cols * windows.rows;
+  const grid =
+    count === 1 ? 'One card will be mounted' : `${count} cards will be mounted in a ${windows.cols} by ${windows.rows} grid`;
+  return (
+    `${grid} over the area from ${windows.xPct}% to ${windows.xPct + windows.wPct}% across ` +
+    `and ${windows.yPct}% to ${windows.yPct + windows.hPct}% down the sheet. Keep that area quiet.`
+  );
+}
+
+async function brief(references: ImageRef[], aspect: number, hint: string, windows?: Windows) {
   const shape = aspect > 1.2 ? 'wide landscape' : aspect < 0.85 ? 'tall portrait' : 'square';
 
   // The model reads bytes, not links, and card art usually arrives as a URL.
@@ -83,8 +124,11 @@ async function brief(references: ImageRef[], aspect: number, hint: string) {
   const count = parts.length;
   parts.push({
     text: [
-      `These ${count} card${count === 1 ? '' : 's'} share a binder page.`,
+      windows
+        ? `These ${count} card${count === 1 ? '' : 's'} will be mounted on this poster.`
+        : `These ${count} card${count === 1 ? '' : 's'} share a binder page.`,
       `The art will be printed in a ${shape} space (aspect ratio ${aspect.toFixed(2)}).`,
+      windows ? windowSentence(windows) : '',
       hint.trim() ? `The collector adds: ${hint.trim()}` : '',
       'Write the brief.',
     ]
@@ -93,7 +137,7 @@ async function brief(references: ImageRef[], aspect: number, hint: string) {
   });
 
   const { ok, status, body } = await callGemini(GEMINI_TEXT_MODEL, {
-    systemInstruction: { parts: [{ text: BRIEF_SYSTEM }] },
+    systemInstruction: { parts: [{ text: windows ? POSTER_SYSTEM : BRIEF_SYSTEM }] },
     contents: [{ role: 'user', parts }],
     // Asking for JSON directly beats hoping the prose happens to parse.
     generationConfig: { responseMimeType: 'application/json' },
@@ -134,11 +178,20 @@ async function callGemini(model: string, body: Record<string, unknown>) {
   };
 }
 
+/**
+ * Nearest ratio the image model offers. Photo paper sizes land all over the
+ * place — 5 x 7 is 0.71, 8 x 10 is 0.80, 13 x 19 is 0.68 — so the near-square
+ * ratios matter here in a way they never did for a pocket.
+ */
 function aspectRatio(aspect: number): string {
   const options: [string, number][] = [
     ['1:1', 1],
+    ['5:4', 1.25],
+    ['4:3', 4 / 3],
     ['3:2', 1.5],
     ['16:9', 16 / 9],
+    ['4:5', 0.8],
+    ['3:4', 0.75],
     ['2:3', 2 / 3],
     ['9:16', 9 / 16],
   ];
@@ -200,7 +253,10 @@ async function inlineReference(ref: ImageRef): Promise<{ mime_type: string; data
   }
 }
 
-async function geminiImage(prompt: string, aspect: number, references: ImageRef[]) {
+/** 1K is plenty for a pocket; a poster needs every pixel it can carry back. */
+type ImageSize = '1K' | '2K' | '4K';
+
+async function geminiImage(prompt: string, aspect: number, references: ImageRef[], imageSize?: ImageSize) {
   const parts: unknown[] = [{ text: prompt }];
   for (const ref of references) {
     const inlined = await inlineReference(ref);
@@ -213,6 +269,11 @@ async function geminiImage(prompt: string, aspect: number, references: ImageRef[
   // The documented shape comes first: ask for both modalities, since the model
   // may narrate alongside the picture, and name the aspect ratio.
   const variants: Record<string, unknown>[] = [
+    // Only when a size was asked for, so a request that does not need one is
+    // not spending an attempt on a field the model may not know.
+    ...(imageSize
+      ? [{ generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio: ratio, imageSize } } }]
+      : []),
     { generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio: ratio } } },
     { generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
     { generationConfig: { imageConfig: { aspectRatio: ratio } } },
@@ -253,6 +314,8 @@ async function geminiImage(prompt: string, aspect: number, references: ImageRef[
 
 /* -------------------------------- handler -------------------------------- */
 
+const SIZES: ImageSize[] = ['1K', '2K', '4K'];
+
 export async function handleGenerate(payload: unknown) {
   const body = (payload ?? {}) as {
     action?: string;
@@ -260,17 +323,21 @@ export async function handleGenerate(payload: unknown) {
     aspect?: number;
     hint?: string;
     prompt?: string;
+    /** Present when the target is a poster: where the cards will be mounted. */
+    windows?: Windows;
+    imageSize?: string;
   };
   const references = Array.isArray(body.references) ? body.references : [];
   const aspect = Number.isFinite(body.aspect) && body.aspect! > 0 ? body.aspect! : 1;
+  const imageSize = SIZES.find((size) => size === body.imageSize);
 
   if (body.action === 'brief') {
     if (!references.length) throw new Error('Pick at least one card for the model to look at.');
-    return brief(references, aspect, body.hint ?? '');
+    return brief(references, aspect, body.hint ?? '', body.windows);
   }
   if (body.action === 'image') {
     if (!body.prompt?.trim()) throw new Error('Write a prompt first.');
-    return geminiImage(body.prompt.trim(), aspect, references);
+    return geminiImage(body.prompt.trim(), aspect, references, imageSize);
   }
   throw new Error('Unknown action.');
 }
@@ -286,7 +353,7 @@ export default async function handler(req: Req, res: Res) {
     const image = (result as { image?: string }).image;
     if (image && image.length > 4_000_000) {
       throw new Error(
-        'The generated image is too large to pass back (over ~4 MB). Ask the model for a smaller size, or set GEMINI_IMAGE_MODEL to a model that returns 1K images.',
+        'The generated image is too large to pass back (over ~4 MB). Drop the render size — 4K posters rarely fit — or set GEMINI_IMAGE_MODEL to a model that returns smaller images.',
       );
     }
     res.status(200).json(result);

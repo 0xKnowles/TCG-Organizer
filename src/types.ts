@@ -61,6 +61,36 @@ export interface Placement {
  */
 export type Opening = 'left' | 'right';
 
+/**
+ * A card display poster: photo-print sized art that carries a card's world out
+ * to the edges of the paper, with windows where the physical cards get mounted
+ * on top. Geometry lives in src/lib/poster.ts.
+ */
+export interface Poster {
+  id: string;
+  name: string;
+  /** A paper size id, or 'custom' with `size` filled in. Portrait dimensions. */
+  sizeId: string;
+  size?: { w: number; h: number };
+  landscape: boolean;
+  /** What the card is mounted in: raw, toploader, one-touch, slab, or custom. */
+  holderId: string;
+  holder?: { w: number; h: number };
+  cols: number;
+  rows: number;
+  /** Millimetres between windows. */
+  gap: number;
+  /** Millimetres the block of windows sits off centre; negative is left/up. */
+  offsetX: number;
+  offsetY: number;
+  image?: ImageSrc;
+  /** Natural pixels of the render, so print resolution can be reported. */
+  pixels?: { w: number; h: number };
+  theme?: string;
+  prompt?: string;
+  updatedAt: number;
+}
+
 export interface Binder {
   id: string;
   name: string;
@@ -82,6 +112,8 @@ export interface Binder {
   firstPageAlone: boolean;
   library: LibraryItem[];
   placements: Placement[];
+  /** Display posters made from these cards. Absent in files saved before them. */
+  posters?: Poster[];
   updatedAt: number;
 }
 

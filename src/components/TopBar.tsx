@@ -15,6 +15,7 @@ export default function TopBar({
   visiblePages,
   activePage,
   onPrint,
+  onPoster,
 }: {
   mode: ViewMode;
   onModeChange: (mode: ViewMode) => void;
@@ -22,6 +23,7 @@ export default function TopBar({
   visiblePages: (number | null)[];
   activePage: number;
   onPrint: () => void;
+  onPoster: () => void;
 }) {
   const { binder, dispatch } = useBinder();
   const { loadBinder, closeBinder } = useBinderCtx();
@@ -230,6 +232,16 @@ export default function TopBar({
                   }}
                 >
                   Print sheets <span>to scale</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onPoster();
+                  }}
+                >
+                  Poster studio <span>extend card art</span>
                 </button>
                 <button type="button" role="menuitem" onClick={savePng} disabled={busy === 'png'}>
                   Export PNG <span>{busy === 'png' ? 'working' : 'this view'}</span>

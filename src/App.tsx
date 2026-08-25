@@ -5,6 +5,7 @@ import PageView, { type Pending } from './components/PageView';
 import Inspector from './components/Inspector';
 import TopBar, { type ViewMode } from './components/TopBar';
 import PrintDialog from './components/PrintDialog';
+import PosterStudio from './components/PosterStudio';
 import type { LibraryItem } from './types';
 import { useBinderCtx } from './store';
 import { anchorAt, canDrop, pageAspect, spineFraction, spreadCount, spreadPages } from './lib/geometry';
@@ -24,6 +25,7 @@ function Workspace() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [postering, setPostering] = useState(false);
 
   const total = binder ? spreadCount(binder, mode) : 1;
   const index = clamp(spreadIndex, 0, Math.max(0, total - 1));
@@ -174,6 +176,7 @@ function Workspace() {
         visiblePages={pages}
         activePage={activePage}
         onPrint={() => setPrinting(true)}
+        onPoster={() => setPostering(true)}
       />
 
       <div className="workspace">
@@ -270,6 +273,7 @@ function Workspace() {
       )}
 
       {printing && <PrintDialog onClose={() => setPrinting(false)} />}
+      {postering && <PosterStudio onClose={() => setPostering(false)} />}
 
       {selected && !pending && (
         <Inspector

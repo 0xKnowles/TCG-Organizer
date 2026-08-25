@@ -1,4 +1,4 @@
-import type { Binder, Placement } from '../types';
+import type { Binder, ImageSrc, Placement } from '../types';
 import { physical } from './pockets';
 
 /**
@@ -110,8 +110,26 @@ async function post<T>(body: unknown, signal?: AbortSignal): Promise<T> {
   return parsed;
 }
 
-export function readPage(refs: ImageRef[], aspect: number, hint: string, signal?: AbortSignal): Promise<ArtBrief> {
-  return post<ArtBrief>({ action: 'brief', references: refs, aspect, hint }, signal);
+/** Where the cards sit on a poster, as fractions of the sheet. */
+export interface WindowHint {
+  cols: number;
+  rows: number;
+  xPct: number;
+  yPct: number;
+  wPct: number;
+  hPct: number;
+}
+
+export type RenderSize = '1K' | '2K' | '4K';
+
+export function readPage(
+  refs: ImageRef[],
+  aspect: number,
+  hint: string,
+  signal?: AbortSignal,
+  windows?: WindowHint,
+): Promise<ArtBrief> {
+  return post<ArtBrief>({ action: 'brief', references: refs, aspect, hint, windows }, signal);
 }
 
 export function renderArt(
@@ -119,11 +137,42 @@ export function renderArt(
   aspect: number,
   refs: ImageRef[],
   signal?: AbortSignal,
+  imageSize?: RenderSize,
 ): Promise<{ image: string; model: string }> {
   return post<{ image: string; model: string }>(
-    { action: 'image', prompt, aspect, references: refs.slice(0, 3) },
+    { action: 'image', prompt, aspect, references: refs.slice(0, 3), imageSize },
     signal,
   );
+}
+
+/** Natural pixels of a data URL, so print resolution can be reported honestly. */
+export function measureImage(url: string): Promise<{ w: number; h: number } | undefined> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve(undefined);
+    img.src = url;
+  });
+}
+
+/** Turn library cards into references, without needing them placed on a page. */
+export async function referencesForItems(
+  items: { image?: ImageSrc }[],
+  resolve: (src: ImageSrc) => string | undefined,
+): Promise<ImageRef[]> {
+  const refs: ImageRef[] = [];
+  for (const item of items) {
+    if (!item.image) continue;
+    if (item.image.type === 'remote') {
+      refs.push({ type: 'url', url: item.image.url });
+      continue;
+    }
+    const url = resolve(item.image);
+    if (!url) continue;
+    const shrunk = await downscale(url);
+    if (shrunk) refs.push(shrunk);
+  }
+  return refs;
 }
 
 export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {

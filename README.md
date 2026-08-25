@@ -34,6 +34,9 @@ including fan art and photos that span two or more pockets.
 - **Generated filler art.** Gemini reads the cards on a page and writes an art
   brief, then renders background art in that style, sized to the pockets you
   picked.
+- **Poster studio.** Photo prints from 4 × 6 to 13 × 19 that carry a card's art
+  out to the edges of the paper, with windows sized for raw cards, toploaders,
+  one-touches or graded slabs to mount on top.
 - **Print to size.** Sheets of tiles at true physical size — 63 × 88 mm by
   default — with dashed cut lines and a label telling you which pocket each piece
   goes in. Art that spans pockets is sliced into one piece per pocket.
@@ -198,6 +201,41 @@ The brief asks for **background art only** — no creatures, characters, text,
 logos or card frames, and nothing recognisable from an existing franchise. It
 takes the mood, palette and painting style of a page and makes something new to
 sit beside it, which is what binder filler is for.
+
+## Poster studio
+
+**Binder menu → Poster studio** makes the other kind of print: a photo-sized
+sheet where the card's world carries on past the card, and the card itself gets
+mounted on top.
+
+1. Pick the paper. Everything from 4 × 6 up to 13 × 19 in, plus A5/A4/A3, in
+   portrait or landscape. The panel gives the exact size in both mm and inches.
+2. Say what the cards sit in — raw, sleeved, toploader, one-touch, PSA or
+   BGS/CGC — or type a measured size. That is the shape the poster leaves room
+   for, and slabs vary enough between batches to be worth measuring.
+3. Set the windows: how many across and down, the gap between them, and a nudge
+   off centre. One card centred is the common case; a 3 × 3 of slabs on 13 × 19
+   is the framed-set look.
+4. Pick the cards to read and **Read the cards**. The model is told the sheet's
+   proportions *and* where the cards will be mounted, as a percentage box, with
+   instructions to keep that area quiet — open sky, still water, plain ground —
+   so nothing worth seeing ends up hidden behind a card.
+5. Edit the prompt, choose a render size, **Generate poster**, then **Keep**.
+
+The rules are the same as for filler art: setting only, no creatures or
+characters — the card supplies those — no text or logos, and nothing
+recognisable from an existing franchise.
+
+**Printing.** The sheet is drawn at true physical size and `@page` is set to the
+paper you chose, so a print at 100% comes out to the millimetre. Dashed outlines
+show where each card goes; they are a setting-up aid and stay off paper unless
+you tick **Print those outlines too**. Mount with photo corners or removable
+squares rather than glue, so the card comes back off.
+
+**Resolution is the thing to watch.** The panel reports the dpi the render lands
+at on the sheet you picked, and warns below 150. A 1K image on a 13 × 19 is
+about 79 dpi, which will look soft — ask for 2K, or print smaller. 4K often will
+not come back at all, because the reply has to fit in roughly 4 MB.
 
 ## Importing a collection
 
