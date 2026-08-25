@@ -164,8 +164,8 @@ Two Gemini models, because the steps do different jobs:
 
 | Step                            | Model                     | Why                                                                                          |
 | ------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------- |
-| Read the cards, write the brief | `gemini-2.5-flash`        | Reads several card images in one call and can be held to "illustration only, ignore the frame" |
-| Render the art                  | `gemini-2.5-flash-image`  | Takes the card art back as reference images, which is what makes the style match               |
+| Read the cards, write the brief | `gemini-3.6-flash`       | Reads several card images in one call and can be held to "illustration only, ignore the frame" |
+| Render the art                  | `gemini-3.1-flash-image` | Takes the card art back as reference images, which is what makes the style match               |
 
 Set `GEMINI_API_KEY` (see `.env.example`) — one key covers both. Both calls run
 in the `/api/generate` function, so it never reaches the browser.
@@ -174,8 +174,12 @@ renames one.
 
 **Notes:**
 
-- The image model is `gemini-2.5-flash-image` (Nano Banana). Point
+- The image model is `gemini-3.1-flash-image` (Nano Banana 2). Point
   `GEMINI_IMAGE_MODEL` at a larger image model if you want bigger output.
+- Google retires model ids periodically, and the API answers "no longer
+  available to new users" naming the successor. That message reaches the panel
+  as-is; `GEMINI_TEXT_MODEL` / `GEMINI_IMAGE_MODEL` let you follow it without
+  waiting on a deploy.
 - Rendering takes tens of seconds, so the function declares `maxDuration = 60`.
   That is the ceiling on Vercel's Hobby plan; raise it on Pro if a bigger model
   needs longer.

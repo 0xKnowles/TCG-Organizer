@@ -108,8 +108,11 @@ async function brief(references: ImageRef[], aspect: number, hint: string) {
 /* ------------------------------ image models ----------------------------- */
 
 const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL ?? 'gemini-2.5-flash';
-const GEMINI_MODEL = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image';
+// Google retires model ids and answers with "no longer available to new users",
+// naming the successor. Both are overridable so a rename is an env var, not a
+// deploy, and that message reaches the panel verbatim when neither is set.
+const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL ?? 'gemini-3.6-flash';
+const GEMINI_MODEL = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3.1-flash-image';
 
 /**
  * One generateContent call. The status comes back with the body rather than as
@@ -207,10 +210,12 @@ async function geminiImage(prompt: string, aspect: number, references: ImageRef[
 
   // The image-generation request shape has moved around between Gemini image
   // models, so try the plausible forms in turn rather than pin one and break.
+  // The documented shape comes first: ask for both modalities, since the model
+  // may narrate alongside the picture, and name the aspect ratio.
   const variants: Record<string, unknown>[] = [
+    { generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio: ratio } } },
+    { generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
     { generationConfig: { imageConfig: { aspectRatio: ratio } } },
-    { generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: ratio } } },
-    { generationConfig: { responseModalities: ['IMAGE'] } },
     {},
   ];
 
