@@ -84,6 +84,8 @@ export interface Poster {
   offsetX: number;
   offsetY: number;
   image?: ImageSrc;
+  /** Library cards mounted in the windows, in reading order. */
+  cardIds?: string[];
   /** Natural pixels of the render, so print resolution can be reported. */
   pixels?: { w: number; h: number };
   theme?: string;

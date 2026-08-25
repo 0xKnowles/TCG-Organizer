@@ -226,9 +226,16 @@ The rules are the same as for filler art: setting only, no creatures or
 characters — the card supplies those — no text or logos, and nothing
 recognisable from an existing franchise.
 
+The preview lays the real cards on the art, at card size, so you are looking at
+the finished thing rather than a rectangle. In a slab window the card is drawn
+at 63 × 88 inside the slab outline, because that is how it sits — filling the
+window would draw the card oversized. Windows past the end of your picked cards
+stay empty.
+
 **Printing.** The sheet is drawn at true physical size and `@page` is set to the
-paper you chose, so a print at 100% comes out to the millimetre. Dashed outlines
-show where each card goes; they are a setting-up aid and stay off paper unless
+paper you chose, so a print at 100% comes out to the millimetre. The cards never
+print — they are real objects that go on the paper afterwards. Dashed outlines
+show where each one goes; they are a setting-up aid and stay off paper unless
 you tick **Print those outlines too**. Mount with photo corners or removable
 squares rather than glue, so the card comes back off.
 

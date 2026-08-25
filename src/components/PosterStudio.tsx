@@ -5,9 +5,11 @@ import { useBinder } from '../store';
 import { blobUrl, putBlob } from '../lib/idb';
 import { uid } from '../lib/util';
 import { useImageUrl } from '../lib/useImage';
+import { physical } from '../lib/pockets';
 import {
   HOLDERS,
   POSTER_SIZES,
+  type Rect,
   dpiOf,
   holderOf,
   newPoster,
@@ -31,6 +33,29 @@ import {
 const RENDER_SIZES: RenderSize[] = ['1K', '2K', '4K'];
 const mm = (n: number) => `${n}mm`;
 const inches = (n: number) => (n / 25.4).toFixed(1);
+
+/**
+ * A card as it will actually sit on the finished poster: the card itself, at
+ * card size, centred in its window. A slab window is bigger than the card it
+ * holds, so filling the window would draw the card oversized.
+ */
+function MountedCard({ id, rect, card }: { id: string; rect: Rect; card: { w: number; h: number } }) {
+  const { binder } = useBinder();
+  const item = binder.library.find((i) => i.id === id);
+  const url = useImageUrl(item?.image);
+  if (!url) return null;
+  const scale = Math.min(1, rect.w / card.w, rect.h / card.h);
+  const w = card.w * scale;
+  const h = card.h * scale;
+  return (
+    <img
+      className="poster-card"
+      src={url}
+      alt=""
+      style={{ left: mm(rect.x + (rect.w - w) / 2), top: mm(rect.y + (rect.h - h) / 2), width: mm(w), height: mm(h) }}
+    />
+  );
+}
 
 function CardTile({ id, picked, onToggle }: { id: string; picked: boolean; onToggle: () => void }) {
   const { binder } = useBinder();
@@ -58,6 +83,7 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [renderSize, setRenderSize] = useState<RenderSize>('2K');
   const [guides, setGuides] = useState(true);
+  const [showCards, setShowCards] = useState(true);
   const [printGuides, setPrintGuides] = useState(false);
   const [busy, setBusy] = useState<'brief' | 'image' | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -76,6 +102,17 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
   const problems = review(poster, shownPixels);
 
   const cards = useMemo(() => binder.library.filter((i) => i.kind === 'card' && i.image), [binder.library]);
+
+  /**
+   * The cards that go in the windows: whatever is picked while a poster is
+   * being made, and whatever was saved with it afterwards. Filled in reading
+   * order, so a window past the end of the list is simply left empty.
+   */
+  const mounted = useMemo(() => {
+    const ids = picked.size ? cards.filter((i) => picked.has(i.id)).map((i) => i.id) : (poster.cardIds ?? []);
+    return ids.filter((id) => binder.library.some((i) => i.id === id));
+  }, [picked, cards, poster.cardIds, binder.library]);
+  const cardSize = physical(binder).card;
 
   const patch = (next: Partial<Poster>) => setPoster((p) => ({ ...p, ...next }));
 
@@ -163,6 +200,7 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
       ...poster,
       name: brief?.theme ? brief.theme.split(/[.,]/)[0].slice(0, 40) : poster.name,
       image: { type: 'local', key },
+      cardIds: mounted,
       pixels: previewPixels,
       theme: brief?.theme,
       prompt,
@@ -215,6 +253,7 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
                       setPoster(p);
                       setPreview(null);
                       setPrompt(p.prompt ?? '');
+                      setPicked(new Set(p.cardIds ?? []));
                     }}
                   >
                     {p.name}
@@ -313,8 +352,12 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
               </span>
             </label>
             <label className="check">
+              <input type="checkbox" checked={showCards} onChange={(e) => setShowCards(e.target.checked)} />
+              Show the cards on top
+            </label>
+            <label className="check">
               <input type="checkbox" checked={guides} onChange={(e) => setGuides(e.target.checked)} />
-              Show where the cards go
+              Outline where they go
             </label>
             <label className="check">
               <input type="checkbox" checked={printGuides} onChange={(e) => setPrintGuides(e.target.checked)} />
@@ -425,6 +468,13 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
                       style={{ left: mm(rect.x), top: mm(rect.y), width: mm(rect.w), height: mm(rect.h) }}
                     />
                   ))}
+                </div>
+              )}
+              {showCards && (
+                <div className="poster-cards" aria-hidden>
+                  {rects.map((rect, i) =>
+                    mounted[i] ? <MountedCard key={i} id={mounted[i]} rect={rect} card={cardSize} /> : null,
+                  )}
                 </div>
               )}
             </div>

@@ -1586,9 +1586,23 @@ button.opening:hover {
   border-radius: 1mm;
 }
 
+/* The mounted cards, drawn the way they will sit on the finished print. */
+.poster-card {
+  position: absolute;
+  object-fit: cover;
+  border-radius: 1.2mm;
+  box-shadow:
+    0 0.3mm 0.6mm rgba(0, 0, 0, 0.35),
+    0 1.6mm 3.5mm rgba(0, 0, 0, 0.3);
+}
+
 @media print {
   /* Guides are a setting-up aid; they only reach paper when asked for. */
   .poster-guides:not(.print) {
+    display: none;
+  }
+  /* The card is a real object laid on the paper — never print a picture of it. */
+  .poster-cards {
     display: none;
   }
   .poster-art,
