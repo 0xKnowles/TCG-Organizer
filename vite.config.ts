@@ -50,6 +50,25 @@ function cardApi(): Plugin {
       return;
     }
 
+    if (url.pathname.startsWith('/api/image')) {
+      // The real function streams bytes; the dev server does the same, so the
+      // canvas work behind extend-art behaves the same locally as deployed.
+      import('./api/image')
+        .then(({ default: image }) =>
+          image({ method: req.method, url: req.url }, {
+            status(code: number) {
+              res.statusCode = code;
+              return this;
+            },
+            json: (body: unknown) => send(res.statusCode, body),
+            send: (body: Buffer) => res.end(body),
+            setHeader: (name: string, value: string) => res.setHeader(name, value),
+          }),
+        )
+        .catch((err: unknown) => send(502, { error: err instanceof Error ? err.message : 'failed' }));
+      return;
+    }
+
     if (!url.pathname.startsWith('/api/cards')) return next();
 
     const names = url.searchParams.get('names');

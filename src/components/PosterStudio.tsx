@@ -177,11 +177,11 @@ export default function PosterStudio({ onClose }: { onClose: () => void }) {
       const refs = await collectReferences();
       const aspect = posterAspect(poster);
       if (step === 'brief') {
-        const result = await readPage(refs, aspect, hint, controller.signal, windowHint(poster));
+        const result = await readPage(refs, aspect, hint, { signal: controller.signal, windows: windowHint(poster) });
         setBrief(result);
         setPrompt(result.prompt);
       } else {
-        const { image } = await renderArt(prompt, aspect, refs, controller.signal, renderSize);
+        const { image } = await renderArt(prompt, aspect, refs, { signal: controller.signal, imageSize: renderSize });
         setPreview(image);
       }
     } catch (err) {

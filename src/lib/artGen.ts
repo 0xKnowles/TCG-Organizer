@@ -122,25 +122,38 @@ export interface WindowHint {
 
 export type RenderSize = '1K' | '2K' | '4K';
 
-export function readPage(
-  refs: ImageRef[],
-  aspect: number,
-  hint: string,
-  signal?: AbortSignal,
-  windows?: WindowHint,
-): Promise<ArtBrief> {
-  return post<ArtBrief>({ action: 'brief', references: refs, aspect, hint, windows }, signal);
+/** Which way a card's art is being carried, and how much of the canvas is new. */
+export interface ExtendHint {
+  direction: 'left' | 'right' | 'up' | 'down';
+  artPct: number;
+}
+
+export interface BriefOptions {
+  signal?: AbortSignal;
+  windows?: WindowHint;
+  extend?: ExtendHint;
+}
+
+export function readPage(refs: ImageRef[], aspect: number, hint: string, options: BriefOptions = {}): Promise<ArtBrief> {
+  const { signal, ...rest } = options;
+  return post<ArtBrief>({ action: 'brief', references: refs, aspect, hint, ...rest }, signal);
+}
+
+export interface RenderOptions {
+  signal?: AbortSignal;
+  imageSize?: RenderSize;
+  extend?: ExtendHint;
 }
 
 export function renderArt(
   prompt: string,
   aspect: number,
   refs: ImageRef[],
-  signal?: AbortSignal,
-  imageSize?: RenderSize,
+  options: RenderOptions = {},
 ): Promise<{ image: string; model: string }> {
+  const { signal, ...rest } = options;
   return post<{ image: string; model: string }>(
-    { action: 'image', prompt, aspect, references: refs.slice(0, 3), imageSize },
+    { action: 'image', prompt, aspect, references: refs.slice(0, 3), ...rest },
     signal,
   );
 }

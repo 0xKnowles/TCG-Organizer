@@ -31,9 +31,9 @@ including fan art and photos that span two or more pockets.
   its front page alone on the right, which is also what decides whether a page is
   a left-hand or right-hand one — and so which of its pockets face each other.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
-- **Generated filler art.** Gemini reads the cards on a page and writes an art
-  brief, then renders background art in that style, sized to the pockets you
-  picked.
+- **Extended card art.** Pick a card and a direction, and Gemini paints its
+  illustration onward into the next pocket or two — the same scene continuing,
+  with the horizon and the light lining up across the divider.
 - **Poster studio.** Photo prints from 4 × 6 to 13 × 19 that carry a card's art
   out to the edges of the paper, with windows sized for raw cards, toploaders,
   one-touches or graded slabs to mount on top.
@@ -146,29 +146,48 @@ Card images are loaded straight from each source's CDN. That is fine for
 display; PNG export additionally needs the image host to allow CORS, and any
 image whose host refuses is left as an empty pocket.
 
-## Generating filler art
+## Extending a card's art
 
-**Add → Generate** builds background art for the empty pockets on a page, in the
-style of the cards already sitting there.
+**Add → Generate** carries one card's illustration past its edge, so the printed
+piece in the next pocket reads as the same picture continuing rather than
+something merely in the same style.
 
-1. Pick the size: one pocket, two wide, or two tall. Two wide is worth
-   preferring — on a facing pair it prints as one uncut piece, and the panel
-   tells you which pockets those are on this page.
-2. Pick which cards it should read. Everything on the page is selected by
-   default; drop any that are off-theme.
-3. **Read the page.** The model looks at the illustrations and writes a brief —
-   theme, palette, and a prompt. It is told to ignore everything the card frame
-   adds: borders, name plates, HP, energy and set symbols, rules text, holo
-   pattern. Only the illustration counts.
-4. Edit the prompt if you want, then **Generate art**. Keep it and it lands in
-   your library as art with the span you chose, ready to place and print.
+1. **Pick the card to extend** — any card already on this page.
+2. **Carry the art** left, right, up or down, by one pocket or two. The panel
+   says what footprint that makes: two across can land uncut on a facing pair,
+   two down is always cut, because pockets load from the side.
+3. **Read the card.** The model is shown the card and asked what lies just past
+   that edge — the rest of the shoreline, more sky, the ground carrying on. It
+   is told to ignore everything the card frame adds: borders, name plates, HP,
+   energy and set symbols, rules text, holo pattern.
+4. Edit the prompt if you want, then **Extend the art**. The preview shows the
+   card and the new piece side by side with the divider between them, the way
+   the binder will hold them, so the join is what you are judging. Keep it and
+   the new piece lands in your library at the right span.
+
+**How the join is made.** The card is composited onto a working canvas — card at
+one edge, the new pocket left empty, the divider gap between them at its real
+width — and the empty part is filled by smearing the card's adjacent edge across
+it. The model repaints that part as the picture continuing, and the card half is
+then cropped back off, leaving just the new piece. Building the canvas rather
+than describing it in words is what makes the horizon, the light and the ground
+line up across the divider.
+
+The gap really is in the canvas, so the sliver of scene a divider hides is
+painted and then lost, exactly as it would be on the page. Nothing has to be
+fudged at print time.
+
+Card art from a search is served through the app's own `/api/image`, because a
+canvas that has had a cross-origin image drawn on it cannot be read back. That
+endpoint only fetches from the hosts the card search itself returns — it is a
+card-art fetcher, not an open proxy.
 
 Two Gemini models, because the steps do different jobs:
 
 | Step                            | Model                     | Why                                                                                          |
 | ------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------- |
-| Read the cards, write the brief | `gemini-3.6-flash`       | Reads several card images in one call and can be held to "illustration only, ignore the frame" |
-| Render the art                  | `gemini-3.1-flash-image` | Takes the card art back as reference images, which is what makes the style match               |
+| Read the card, write the brief | `gemini-3.6-flash`       | Reads card images and can be held to "illustration only, ignore the frame" |
+| Paint the art                  | `gemini-3.1-flash-image` | Takes the working canvas as a reference image and repaints the empty part of it |
 
 Set `GEMINI_API_KEY` (see `.env.example`) — one key covers both. Both calls run
 in the `/api/generate` function, so it never reaches the browser.
@@ -197,10 +216,10 @@ renames one.
 - If the model declines — a safety block, or it answers in words instead of
   pixels — that reason is shown rather than a bare "no image".
 
-The brief asks for **background art only** — no creatures, characters, text,
-logos or card frames, and nothing recognisable from an existing franchise. It
-takes the mood, palette and painting style of a page and makes something new to
-sit beside it, which is what binder filler is for.
+The brief asks for **setting only** — no creatures, characters, text, logos or
+card frames, and nothing recognisable from an existing franchise. The card keeps
+its characters; what gets painted is the place they are standing in, carrying on
+past the edge.
 
 ## Poster studio
 
