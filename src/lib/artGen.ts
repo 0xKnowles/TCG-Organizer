@@ -16,6 +16,12 @@ export interface ArtBrief {
   palette: string[];
   /** The prompt handed to the image model. Editable before generating. */
   prompt: string;
+  /**
+   * Where the illustration sits on the card, in percent — extension only. The
+   * frame is cropped to this before the working canvas is built, which is what
+   * stops the model carrying the card's border outward instead of the picture.
+   */
+  art?: { x?: number; y?: number; w?: number; h?: number };
 }
 
 export interface GenerateSpan {

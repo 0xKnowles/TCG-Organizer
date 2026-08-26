@@ -9,11 +9,15 @@ import { uid } from '../lib/util';
 import { useImageUrl } from '../lib/useImage';
 import {
   DIRECTIONS,
+  FULL_CARD,
   aspectOfArt,
   buildComposite,
+  cardBytes,
   composite,
   cropExtension,
+  cropFromPercent,
   isHorizontal,
+  type Crop,
   type Direction,
   type ExtendPlan,
 } from '../lib/extend';
@@ -41,6 +45,7 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
   const [hint, setHint] = useState('');
   const [brief, setBrief] = useState<ArtBrief | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [crop, setCrop] = useState<Crop>(FULL_CARD);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<'brief' | 'image' | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -88,17 +93,20 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
     setBusy(step);
     setError(null);
     try {
-      // The canvas is the reference for both steps: reading the card off the
-      // same picture the model will be asked to paint over keeps them agreed.
-      const canvas = await buildComposite(anchorUrl, box);
-      const refs = [{ type: 'base64' as const, media_type: 'image/jpeg', data: canvas.split(',')[1] }];
       const extend = { direction, artPct };
 
       if (step === 'brief') {
+        // Reading happens on the whole card, frame and all: the model has to
+        // see the frame to tell us where it ends.
+        const refs = [{ type: 'base64' as const, media_type: 'image/jpeg', data: await cardBytes(anchorUrl) }];
         const result = await readPage(refs, artAspect, hint, { signal: controller.signal, extend });
         setBrief(result);
         setPrompt(result.prompt);
+        setCrop(cropFromPercent(result.art));
       } else {
+        // Painting happens on the illustration alone, cropped out of the card.
+        const canvas = await buildComposite(anchorUrl, box, crop);
+        const refs = [{ type: 'base64' as const, media_type: 'image/jpeg', data: canvas.split(',')[1] }];
         const { image } = await renderArt(prompt, box.w / box.h, refs, { signal: controller.signal, extend });
         setPreview(await cropExtension(image, box));
       }
@@ -138,7 +146,10 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
                 key={placement.id}
                 placement={placement}
                 picked={placement.id === anchor?.id}
-                onPick={() => setAnchorId(placement.id)}
+                onPick={() => {
+                  setAnchorId(placement.id);
+                  setCrop(FULL_CARD);
+                }}
               />
             ))}
           </div>
@@ -196,6 +207,72 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
               ))}
             </div>
           )}
+          <div className="opt">
+            <span className="sect">Just the illustration</span>
+            <div className="crop-view">
+              {anchorUrl && <img src={anchorUrl} alt="" />}
+              <span
+                className="crop-box"
+                style={{
+                  left: `${crop.x * 100}%`,
+                  top: `${crop.y * 100}%`,
+                  width: `${crop.w * 100}%`,
+                  height: `${crop.h * 100}%`,
+                }}
+              />
+            </div>
+            <div className="crop-edges">
+              {(
+                [
+                  ['Top', 'y'],
+                  ['Left', 'x'],
+                  ['Right', 'r'],
+                  ['Bottom', 'b'],
+                ] as const
+              ).map(([label, edge]) => {
+                const value = Math.round(
+                  (edge === 'y' ? crop.y : edge === 'x' ? crop.x : edge === 'r' ? 1 - crop.x - crop.w : 1 - crop.y - crop.h) *
+                    100,
+                );
+                return (
+                  <label key={edge} className="field">
+                    <span>{label} %</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={45}
+                      value={value}
+                      onChange={(e) => {
+                        const n = Math.min(45, Math.max(0, Number(e.target.value))) / 100;
+                        setCrop((c) =>
+                          edge === 'y'
+                            ? { ...c, y: n, h: c.y + c.h - n }
+                            : edge === 'x'
+                              ? { ...c, x: n, w: c.x + c.w - n }
+                              : edge === 'r'
+                                ? { ...c, w: 1 - c.x - n }
+                                : { ...c, h: 1 - c.y - n },
+                        );
+                      }}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+            <div className="add-row">
+              <button type="button" className="btn btn-sm" onClick={() => setCrop(FULL_CARD)}>
+                Whole card
+              </button>
+              <button type="button" className="btn btn-sm" onClick={() => setCrop(cropFromPercent(brief.art))}>
+                What it found
+              </button>
+            </div>
+            <p className="note">
+              Only what is inside the box gets carried onward. Trim the border, name plate and text box off, or the
+              model will paint those onward instead of the picture.
+            </p>
+          </div>
+
           <label className="field">
             <span>Prompt</span>
             <textarea className="csv-text" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={5} />
@@ -257,9 +334,9 @@ export default function GenerateArt({ page, onDone }: { page: number; onDone: ()
 
       {error && <p className="warn">{error}</p>}
       <p className="note fineprint">
-        The card is composited onto a working canvas with the new pocket left empty, and the model paints the picture
-        onward into it — so the horizon, the light and the ground line up across the divider. Setting only: the card
-        keeps its characters.
+        The card's illustration — cropped out of its frame — is composited onto a working canvas with the new pocket
+        left empty, and the model paints the picture onward into it, so the horizon, the light and the ground line up
+        across the divider. Setting only: the card keeps its characters.
       </p>
     </>
   );

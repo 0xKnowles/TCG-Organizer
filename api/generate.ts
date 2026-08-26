@@ -89,8 +89,10 @@ Rules for that prompt:
 - Nothing recognisable from an existing franchise. Take the place, the palette, the light and the painting style — never a specific character or emblem.
 - Name the palette, the light, the depth and the rendering style plainly. Keep it under 120 words.
 
+You must also report where the illustration sits on the card you were shown, so the frame can be cropped away before anything is painted. Give it as percentages of the whole card image: x and y of the top-left corner, then width and height. For a full-art card that is close to the whole card, 0/0/100/100. For an ordinary card it is the picture window only — above the name plate is not part of it, and neither is the text box below, the border around it, or the bar of set symbols at the bottom.
+
 Reply with JSON only, no prose around it:
-{"theme": "one or two sentences on what the card is a view of and what lies past that edge", "palette": ["#rrggbb", "..."], "prompt": "the image prompt"}`;
+{"theme": "one or two sentences on what the card is a view of and what lies past that edge", "palette": ["#rrggbb", "..."], "art": {"x": 0, "y": 0, "w": 100, "h": 100}, "prompt": "the image prompt"}`;
 
 function parseBrief(raw: string) {
   const start = raw.indexOf('{');
@@ -100,12 +102,15 @@ function parseBrief(raw: string) {
     theme?: string;
     palette?: unknown;
     prompt?: string;
+    art?: { x?: number; y?: number; w?: number; h?: number };
   };
   if (!parsed.prompt) throw new Error('The brief came back without a prompt.');
   return {
     theme: parsed.theme ?? '',
     palette: Array.isArray(parsed.palette) ? parsed.palette.filter((c): c is string => typeof c === 'string') : [],
     prompt: parsed.prompt,
+    // Only extension asks for this; the others simply will not have it.
+    art: parsed.art && typeof parsed.art === 'object' ? parsed.art : undefined,
   };
 }
 

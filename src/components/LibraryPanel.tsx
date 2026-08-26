@@ -8,6 +8,7 @@ import { normalizeImage, uid } from '../lib/util';
 import { startDrag, endDrag } from '../lib/dnd';
 import { useImageUrl } from '../lib/useImage';
 import GenerateArt from './GenerateArt';
+import TextTile from './TextTile';
 import FamilyBuilder from './FamilyBuilder';
 
 const API_KEY_STORAGE = 'binder-studio:pokemontcg-key';
@@ -184,11 +185,13 @@ function CsvImport({ onDone }: { onDone: () => void }) {
 
 /* --------------------------------- add ---------------------------------- */
 
-type Source = 'search' | 'family' | 'upload' | 'link' | 'csv' | 'generate';
+type Source = 'search' | 'family' | 'upload' | 'link' | 'csv' | 'generate' | 'text';
 
-function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: boolean; page: number }) {
+function AddView({ onDone, allowDrag, page, editingText }: { onDone: () => void; allowDrag: boolean; page: number; editingText?: ArtItem }) {
   const { dispatch } = useBinder();
-  const [source, setSource] = useState<Source>('search');
+  // Reworded tiles open straight onto the text tab, holding the tile itself.
+  const [editing, setEditing] = useState<ArtItem | undefined>(editingText);
+  const [source, setSource] = useState<Source>(editingText ? 'text' : 'search');
   const [asArt, setAsArt] = useState(false);
   const [span, setSpan] = useState({ c: 2, r: 1 });
   const [query, setQuery] = useState('');
@@ -330,6 +333,16 @@ function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: b
           <button type="button" aria-pressed={source === 'generate'} onClick={() => setSource('generate')}>
             Generate
           </button>
+          <button
+            type="button"
+            aria-pressed={source === 'text'}
+            onClick={() => {
+              setEditing(undefined);
+              setSource('text');
+            }}
+          >
+            Text
+          </button>
         </div>
       </div>
 
@@ -387,6 +400,8 @@ function AddView({ onDone, allowDrag, page }: { onDone: () => void; allowDrag: b
         {source === 'csv' && <CsvImport onDone={onDone} />}
 
         {source === 'generate' && <GenerateArt page={page} onDone={onDone} />}
+
+        {source === 'text' && <TextTile editing={editing} onDone={onDone} />}
 
         {(source === 'upload' || source === 'link') && (
           <div className="insp-line">
@@ -487,6 +502,7 @@ export default function LibraryPanel({
 }) {
   const { binder, dispatch } = useBinder();
   const [adding, setAdding] = useState(false);
+  const [editingText, setEditingText] = useState<ArtItem | undefined>();
   const [filter, setFilter] = useState('');
   const [scope, setScope] = useState<'all' | 'unplaced' | 'needed'>('all');
 
@@ -517,7 +533,15 @@ export default function LibraryPanel({
       </button>
 
       {adding ? (
-        <AddView onDone={() => setAdding(false)} allowDrag={allowDrag} page={currentPage} />
+        <AddView
+          onDone={() => {
+            setAdding(false);
+            setEditingText(undefined);
+          }}
+          allowDrag={allowDrag}
+          page={currentPage}
+          editingText={editingText}
+        />
       ) : (
         <>
           <div className="library-head">
@@ -572,6 +596,20 @@ export default function LibraryPanel({
                     </span>
                     <span className="item-tag">{count > 0 ? `×${count}` : ''}</span>
                   </button>
+                  {item.kind === 'art' && item.text && (
+                    <button
+                      type="button"
+                      className="item-flag"
+                      aria-label={`Reword ${item.name}`}
+                      title="Change the wording"
+                      onClick={() => {
+                        setEditingText(item);
+                        setAdding(true);
+                      }}
+                    >
+                      edit
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="item-flag"

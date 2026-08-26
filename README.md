@@ -33,7 +33,10 @@ including fan art and photos that span two or more pockets.
 - **Pages.** Insert, clear, delete, or fill a page with whatever is still unplaced.
 - **Extended card art.** Pick a card and a direction, and Gemini paints its
   illustration onward into the next pocket or two — the same scene continuing,
-  with the horizon and the light lining up across the divider.
+  with the horizon and the light lining up across the divider. The card's frame
+  is cropped away first, so it is the picture that carries on and not the border.
+- **Text tiles.** Words in a pocket — a set name, a line title, a divider label —
+  auto-fitted and printed at the same resolution as everything else.
 - **Poster studio.** Photo prints from 4 × 6 to 13 × 19 that carry a card's art
   out to the edges of the paper, with windows sized for raw cards, toploaders,
   one-touches or graded slabs to mount on top.
@@ -156,19 +159,25 @@ something merely in the same style.
 2. **Carry the art** left, right, up or down, by one pocket or two. The panel
    says what footprint that makes: two across can land uncut on a facing pair,
    two down is always cut, because pockets load from the side.
-3. **Read the card.** The model is shown the card and asked what lies just past
-   that edge — the rest of the shoreline, more sky, the ground carrying on. It
-   is told to ignore everything the card frame adds: borders, name plates, HP,
-   energy and set symbols, rules text, holo pattern.
-4. Edit the prompt if you want, then **Extend the art**. The preview shows the
+3. **Read the card.** The model is shown the whole card and asked two things:
+   what lies just past that edge — the rest of the shoreline, more sky, the
+   ground carrying on — and *where the illustration is*, as a box on the card.
+4. **Check the crop.** The detected box is drawn over the card, with four inset
+   controls to trim it by hand and buttons for **Whole card** and **What it
+   found**. Only what is inside the box gets carried onward. This is the setting
+   that matters most: hand the model a border and it will paint the border
+   outward instead of the picture.
+5. Edit the prompt if you want, then **Extend the art**. The preview shows the
    card and the new piece side by side with the divider between them, the way
    the binder will hold them, so the join is what you are judging. Keep it and
    the new piece lands in your library at the right span.
 
-**How the join is made.** The card is composited onto a working canvas — card at
-one edge, the new pocket left empty, the divider gap between them at its real
-width — and the empty part is filled by smearing the card's adjacent edge across
-it. The model repaints that part as the picture continuing, and the card half is
+**How the join is made.** The illustration — cropped out of the card, frame
+discarded — is composited onto a working canvas at one edge, the new pocket left
+empty, the divider gap between them at its real width, and the empty part filled
+by smearing the illustration's adjacent edge across it. The crop is drawn into
+its slot filling it rather than stretched to fit, so the scene the extension has
+to continue is never distorted. The model repaints that part as the picture continuing, and the card half is
 then cropped back off, leaving just the new piece. Building the canvas rather
 than describing it in words is what makes the horizon, the light and the ground
 line up across the divider.
@@ -262,6 +271,25 @@ squares rather than glue, so the card comes back off.
 at on the sheet you picked, and warns below 150. A 1K image on a 13 × 19 is
 about 79 dpi, which will look soft — ask for 2K, or print smaller. 4K often will
 not come back at all, because the reply has to fit in roughly 4 MB.
+
+## Text tiles
+
+**Add → Text** puts words in a pocket: a set name, a line title, a year, a
+divider label.
+
+Type the words and they render live, sized to the pockets you picked — one
+pocket, two wide, two tall, or a whole row of three. Pick a font, weight,
+alignment and a quarter turn for a label running down the side of a page; pick
+ink and paper colours, or no background at all, which leaves bare paper. The
+type size is fitted automatically: a tile is a fixed piece of paper, so the only
+useful size is as large as the words will go.
+
+Tiles are rendered to a picture at just over 300 dpi for the size chosen, and
+stored like any other art — so placing, PNG export and true-size printing need
+to know nothing about them, and a two-wide tile splits at the divider exactly as
+art does. The words and the styling are kept on the item too, so **edit** on a
+tile's row reopens it with everything as it was and replaces it in place, still
+on the page it was placed on.
 
 ## Importing a collection
 

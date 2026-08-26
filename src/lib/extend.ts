@@ -117,13 +117,61 @@ function load(url: string): Promise<HTMLImageElement> {
 const CANVAS_EDGE = 1024;
 
 /**
+ * The part of a card image that is the illustration, as fractions of the whole.
+ * A card is mostly furniture — border, name plate, HP, text box, set symbols —
+ * and handing all of that to the model is what makes it carry the border
+ * outward instead of the picture. Only what is inside this box is extended.
+ */
+export interface Crop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const FULL_CARD: Crop = { x: 0, y: 0, w: 1, h: 1 };
+
+/** Percentages from the model, clamped into something drawable. */
+export function cropFromPercent(box: { x?: number; y?: number; w?: number; h?: number } | undefined): Crop {
+  if (!box) return FULL_CARD;
+  const at = (n: number | undefined, fallback: number) =>
+    typeof n === 'number' && Number.isFinite(n) ? Math.min(100, Math.max(0, n)) / 100 : fallback;
+  const x = at(box.x, 0);
+  const y = at(box.y, 0);
+  const w = Math.min(at(box.w, 1), 1 - x);
+  const h = Math.min(at(box.h, 1), 1 - y);
+  // A degenerate box is worse than no box at all.
+  return w < 0.15 || h < 0.15 ? FULL_CARD : { x, y, w, h };
+}
+
+/** Read a card image out as bytes small enough to send. */
+export async function cardBytes(url: string, maxEdge = 768): Promise<string> {
+  const img = await load(url);
+  const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('This browser will not give up a canvas to work on.');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+}
+
+/**
  * The card at one edge, and the empty part filled by smearing the card's
  * adjacent edge across it. A flat colour gives the model nothing to work with;
  * a smear already has the horizon and the light in roughly the right places,
  * so what comes back tends to line up instead of merely rhyming.
  */
-export async function buildComposite(cardUrl: string, box: Composite): Promise<string> {
+export async function buildComposite(cardUrl: string, box: Composite, crop: Crop = FULL_CARD): Promise<string> {
   const img = await load(cardUrl);
+  // The illustration, in source pixels. Everything outside it is furniture.
+  const src = {
+    x: crop.x * img.naturalWidth,
+    y: crop.y * img.naturalHeight,
+    w: crop.w * img.naturalWidth,
+    h: crop.h * img.naturalHeight,
+  };
   const scale = CANVAS_EDGE / Math.max(box.w, box.h);
   const W = Math.round(box.w * scale);
   const H = Math.round(box.h * scale);
@@ -136,23 +184,33 @@ export async function buildComposite(cardUrl: string, box: Composite): Promise<s
   const cardBox = { x: box.card.x * W, y: box.card.y * H, w: box.card.w * W, h: box.card.h * H };
   const artBox = { x: box.art.x * W, y: box.art.y * H, w: box.art.w * W, h: box.art.h * H };
 
-  // Smear the strip of card nearest the join across the empty area first, so
-  // the card itself is drawn over the top of it and stays crisp.
+  // Fill the card's slot with the illustration rather than stretching it to
+  // fit: trimming a little beats distorting the scene the extension has to
+  // continue. `fill` is the part of the crop that actually lands in the slot.
+  const slotAspect = cardBox.w / cardBox.h;
+  const fill =
+    src.w / src.h > slotAspect
+      ? { w: src.h * slotAspect, h: src.h }
+      : { w: src.w, h: src.w / slotAspect };
+  const fillBox = { x: src.x + (src.w - fill.w) / 2, y: src.y + (src.h - fill.h) / 2, w: fill.w, h: fill.h };
+
+  // Smear the strip of illustration nearest the join across the empty area
+  // first, so the card is drawn over the top of it and stays crisp.
   const strip = 0.06;
   const across = box.w > box.h;
   const cardAfter = artBox.x < cardBox.x || artBox.y < cardBox.y;
   ctx.filter = 'blur(10px)';
   if (across) {
-    const sw = Math.max(1, img.naturalWidth * strip);
-    const sx = cardAfter ? 0 : img.naturalWidth - sw;
-    ctx.drawImage(img, sx, 0, sw, img.naturalHeight, artBox.x, artBox.y, artBox.w, artBox.h);
+    const sw = Math.max(1, fillBox.w * strip);
+    const sx = cardAfter ? fillBox.x : fillBox.x + fillBox.w - sw;
+    ctx.drawImage(img, sx, fillBox.y, sw, fillBox.h, artBox.x, artBox.y, artBox.w, artBox.h);
   } else {
-    const sh = Math.max(1, img.naturalHeight * strip);
-    const sy = cardAfter ? 0 : img.naturalHeight - sh;
-    ctx.drawImage(img, 0, sy, img.naturalWidth, sh, artBox.x, artBox.y, artBox.w, artBox.h);
+    const sh = Math.max(1, fillBox.h * strip);
+    const sy = cardAfter ? fillBox.y : fillBox.y + fillBox.h - sh;
+    ctx.drawImage(img, fillBox.x, sy, fillBox.w, sh, artBox.x, artBox.y, artBox.w, artBox.h);
   }
   ctx.filter = 'none';
-  ctx.drawImage(img, cardBox.x, cardBox.y, cardBox.w, cardBox.h);
+  ctx.drawImage(img, fillBox.x, fillBox.y, fillBox.w, fillBox.h, cardBox.x, cardBox.y, cardBox.w, cardBox.h);
 
   return canvas.toDataURL('image/jpeg', 0.9);
 }

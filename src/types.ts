@@ -2,7 +2,20 @@
 export type ImageSrc = { type: 'remote'; url: string } | { type: 'local'; key: string };
 
 /** Where an item came from, so printing can default to what you must print. */
-export type Origin = 'api' | 'upload' | 'link' | 'csv' | 'generated';
+export type Origin = 'api' | 'upload' | 'link' | 'csv' | 'generated' | 'text';
+
+/** Styling for a text tile; the renderer lives in src/lib/textArt.ts. */
+export interface TextSpec {
+  text: string;
+  fontId: string;
+  weight: 400 | 700;
+  colour: string;
+  background: string;
+  align: 'left' | 'center' | 'right';
+  padding: number;
+  rule: boolean;
+  rotate: 0 | 90 | 270;
+}
 
 export interface CardItem {
   id: string;
@@ -27,6 +40,11 @@ export interface ArtItem {
   origin?: Origin;
   owned?: boolean;
   image: ImageSrc;
+  /**
+   * The words and styling behind a text tile. The picture is what gets placed
+   * and printed; this is kept so the wording can be changed afterwards.
+   */
+  text?: TextSpec;
   /** Default footprint in slots when dropped into a page. */
   spanCols: number;
   spanRows: number;

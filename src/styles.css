@@ -1629,3 +1629,61 @@ button.opening:hover {
 .seam-divider {
   background: #0b0b0d;
 }
+
+/* Marking off the illustration, so the frame is not what gets extended. */
+.crop-view {
+  position: relative;
+  width: 100%;
+  max-width: 190px;
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.crop-view img {
+  display: block;
+  width: 100%;
+}
+.crop-box {
+  position: absolute;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.crop-edges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+}
+
+/* Text tiles: colour choices and the live preview. */
+.swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  cursor: pointer;
+  padding: 0;
+}
+.swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.swatch-none {
+  background:
+    linear-gradient(45deg, transparent 45%, var(--line-2) 45% 55%, transparent 55%),
+    repeating-conic-gradient(var(--panel-2) 0% 25%, var(--panel) 0% 50%) 0 0 / 12px 12px;
+}
+.text-preview {
+  width: 100%;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  /* No background means bare paper, so show it against paper. */
+  background: repeating-conic-gradient(#e9e9e6 0% 25%, #fafaf8 0% 50%) 0 0 / 14px 14px;
+}
